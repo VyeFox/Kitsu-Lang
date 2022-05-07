@@ -1,7 +1,7 @@
 #include "link.hpp"
 using namespace kitsu;
 /*
-*   C++ code that tests simple compilation as well as template compilation and instantiation.
+*   C++ code that tests simple compilation as well as template compilation and instantiation
 */
 
 static_assert(not scope<int>, "int is wrongly a valid scope");
