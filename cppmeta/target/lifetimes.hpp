@@ -45,23 +45,5 @@ namespace kitsu {
     template<typename T, typename... Ss>
     concept captures =
         (... && _is_scope_with_capture<T, Ss>);
-
-    template<typename T, scope S>
-    class ref {
-        T* t;
-        ref(T& t) : t(&t) {}
-    public:
-        template<captures<S> OS>
-        ref(ref<T, OS>&& r) : t(r.t) {}
-        template<captures<S> OS>
-        ref<T, OS>& operator=(ref<T, OS>&& r) {
-            t = r.t;
-            return *this;
-        }
-        template<scope OS>
-            requires captures<S, OS>
-        operator ref<T, OS>& () { return ref<T, OS>{*this}; }
-    };
-
 };
 
