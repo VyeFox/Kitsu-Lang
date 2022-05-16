@@ -16,18 +16,18 @@ nameStart :: Parser String
 nameStart = (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'])
 
 nameBodyStandard :: Parser String
-nameBodyStandard = (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
+nameBodyStandard = MP.label "namebody" $ (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
 
 nameBodySymbolic :: Parser String
-nameBodySymbolic = ("Su" <$ MP.string "_")
-               <|> ("Am" <$ MP.string "-")
-               <|> ("Ap" <$ MP.string "+")
+nameBodySymbolic = MP.label "namesymbols" $ (MP.try $ "Su" <$ MP.string "_")
+               <|> (MP.try $ "Am" <$ MP.string "-")
+               <|> (MP.try $ "Ap" <$ MP.string "+")
                <|> ("As" <$ MP.string "*")
 
 parseName :: Parser Name
 parseName = MP.label "name" $ (<$>) Name $ do
     start <- nameStart
-    body <- MP.many $ nameBodyStandard <|> nameBodySymbolic
+    body <- MP.many $ MP.try nameBodyStandard <|> nameBodySymbolic
     return $ (<>) "userdef" $ foldl (<>) start body 
 
 
