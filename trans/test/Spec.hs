@@ -16,4 +16,4 @@ testmsgs = [
     ]
 
 main :: IO ()
-main = () <$ sequence ((MP.parseTest (curleyBracketTree parseName)) <$> testmsgs)
+main = () <$ sequence (MP.parseTest (curleyBracketTree parseName) <* optionalWhiteSpace <* MP.eof <$> testmsgs)
