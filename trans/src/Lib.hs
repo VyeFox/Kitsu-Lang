@@ -10,7 +10,7 @@ type Parser a = MP.Parsec Void String a
 
 
 
-data Name = Name String deriving (Show)
+newtype Name = Name String deriving (Show)
 
 nameStart :: Parser String
 nameStart = (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'])

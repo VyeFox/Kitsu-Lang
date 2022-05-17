@@ -10,4 +10,4 @@ main = do
     result <- MP.runParser (curleyBracketTree parseName <* optionalWhiteSpace <* MP.eof) "NO-FILE" <$> getLine
     case result of
         Left err -> putStrLn $ MP.errorBundlePretty err
-        Right res -> putStrLn $ show res
+        Right res -> print res
