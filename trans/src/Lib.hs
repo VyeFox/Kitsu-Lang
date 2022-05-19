@@ -16,19 +16,21 @@ nameStart :: Parser String
 nameStart = (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'])
 
 nameBodyStandard :: Parser String
-nameBodyStandard = MP.label "namebody" $ (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
+nameBodyStandard = MP.label "namebody" $
+    (<$>) (\c -> "_" ++ [c]) $ MP.oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'])
 
 nameBodySymbolic :: Parser String
-nameBodySymbolic = MP.label "namesymbols" $ MP.try ("Su" <$ MP.string "_")
-               <|> MP.try ("Am" <$ MP.string "-")
-               <|> MP.try ("Ap" <$ MP.string "+")
-               <|> ("As" <$ MP.string "*")
+nameBodySymbolic = MP.label "namesymbols" $
+    MP.try ("Su" <$ MP.string "_")
+    <|> MP.try ("Am" <$ MP.string "-")
+    <|> MP.try ("Ap" <$ MP.string "+")
+    <|> ("As" <$ MP.string "*")
 
 parseName :: Parser Name
-parseName = MP.label "name" $ (<$>) Name $ do
-    start <- nameStart
-    body <- MP.many $ MP.try nameBodyStandard <|> nameBodySymbolic
-    return $ (<>) "userdef" $ foldl (<>) start body
+parseName = MP.label "name" $
+    (<$>) Name $
+    (<$>) join $
+    (:) <$> nameStart <*> MP.many (MP.try nameBodyStandard <|> nameBodySymbolic)
 
 
 
@@ -41,17 +43,15 @@ optionalWhiteSpace :: Parser String
 optionalWhiteSpace = MP.many (MP.oneOf spaceChars)
 
 whiteSpace :: Parser String
-whiteSpace = do
-    head <- MP.oneOf spaceChars
-    tail <- optionalWhiteSpace
-    return (head:tail)
+whiteSpace = (:) <$> MP.oneOf spaceChars <*> optionalWhiteSpace
 
 curleyBracketSet :: Parser a -> Parser [a]
 curleyBracketSet p = MP.label "{}" (MP.try ([] <$ MP.string "{" <* optionalWhiteSpace <* MP.string "}"))
-    <|> MP.label "{elems,... elem}" (MP.string "{" *> optionalWhiteSpace *> (do
-        body <- MP.many (MP.try (p <* MP.string "," <* optionalWhiteSpace))
-        head <- p
-        return (body ++ [head])) <* optionalWhiteSpace <* MP.string "}")
+    <|> MP.label "{elems,... elem}" (MP.string "{" *> optionalWhiteSpace *>
+    ((++) <$> MP.many (MP.try (p <* MP.string "," <* optionalWhiteSpace)) <*> (pure <$> p))
+    <* optionalWhiteSpace <* MP.string "}")
+
 
 curleyBracketTree :: Parser a -> Parser (Tree a)
-curleyBracketTree p = MP.try (Leaf <$> p) <|> (Node <$> curleyBracketSet (curleyBracketTree p))
+curleyBracketTree p = MP.try (Leaf <$> p)
+    <|> (Node <$> curleyBracketSet (curleyBracketTree p))
