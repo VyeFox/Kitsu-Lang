@@ -9,4 +9,4 @@ import Data.Void ( Void )
 import Lib (example)
 
 main :: IO ()
-main = getLine >>= MP.parseTest example
+main = getLine >>= MP.parseTest (example <* MP.eof)
