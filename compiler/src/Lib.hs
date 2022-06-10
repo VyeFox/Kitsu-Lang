@@ -9,4 +9,4 @@ import Data.Void ( Void )
 type Parser a = MP.Parsec Void String a
 
 example :: Parser String
-example = MP.string "example"
+example = MP.string "abc"
