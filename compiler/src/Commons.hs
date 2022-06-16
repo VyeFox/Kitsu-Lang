@@ -1,80 +1,42 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Commons where
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use lambda-case" #-}
+module Commons ((<:>), selectUntil, stringLiteral) where
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
 import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
+import qualified Text.Megaparsec.Error as MP
 import Data.Void ( Void )
+import Text.Megaparsec (pos1)
 
 
--- optional white space no returns
-inlinespace :: forall e m. (MP.MonadParsec e String m) => m String
-inlinespace = MP.many $ MP.oneOf " \t"
-
--- optional white space can return
-space :: forall e m. (MP.MonadParsec e String m) => m String
-space = MP.many $ MP.oneOf " \t\n\r"
-
--- white space no returns
-inlinegap :: forall e m. (MP.MonadParsec e String m) => m String
-inlinegap = MP.some $ MP.oneOf " \t"
-
--- white space can return
-gap :: forall e m. (MP.MonadParsec e String m) => m String
-gap = MP.some $ MP.oneOf " \t\n\r"
-
--- not typable: " \"\t\n\r\\"
-pathchars :: [Char]
-pathchars = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ "|¬`¦!£$%^&*()_+-={}[]:@~;'#<>?,."
+instance MP.ShowErrorComponent () where
+  showErrorComponent _ = "()"
 
 
-rawfile :: forall e m. (MP.MonadParsec e String m) => m String
-rawfile = MP.some $ MP.oneOf pathchars
+selectUntil :: (MP.Stream a) => MP.Parsec () a b -> MP.Parsec () a [MP.Token a]
+selectUntil p = MP.many $ MP.try $ MP.notFollowedBy p *> MP.anySingle
 
 
-strfile :: forall e m. (MP.MonadParsec e String m) => m String
-strfile = MP.char '"' *> MP.label "string body" (MP.many pathchar) <* MP.char '"'
+stringLiteral :: MP.Parsec () String String
+stringLiteral = MP.char '"' *> MP.many term <* MP.char '"'
     where
-        pathchar = 
+        term =
             MP.try ('\"' <$ MP.string "\\\"") <|>
             MP.try ('\t' <$ MP.string "\\t") <|>
             MP.try ('\n' <$ MP.string "\\n") <|>
             MP.try ('\r' <$ MP.string "\\r") <|>
+            MP.try ('\NUL' <$ MP.string "\\0") <|>
             MP.try ('\\' <$ MP.string "\\\\") <|>
-            MP.oneOf (' ':pathchars)
+            MP.noneOf "\\\""
 
 
--- path "/" is supported for proper file path parsing and not because I think it's a good idea
-rawpath :: forall e m. (MP.MonadParsec e String m) => m String
-rawpath = MP.try localpath <|> MP.try path <|> MP.string "/" -- 
-    where
-        pathchar = MP.oneOf pathchars
-        segment = (:) <$> MP.char '/' <*> ((:) <$> pathchar <*> MP.many pathchar)
-        path = (<$>) join $ (:) <$> segment <*> MP.many segment
-        localpath = (:) <$> MP.char '.' <*> (join <$> MP.many segment)
-
-
--- path "/" is supported for proper file path parsing and not because I think it's a good idea
-strpath :: forall e m. (MP.MonadParsec e String m) => m String
-strpath = MP.char '"' *> MP.label "string body" (MP.try localpath <|> MP.try path <|> MP.string "/") <* MP.char '"'
-    where
-        pathchar =
-            MP.try ('\"' <$ MP.string "\\\"") <|>
-            MP.try ('\t' <$ MP.string "\\t") <|>
-            MP.try ('\n' <$ MP.string "\\n") <|>
-            MP.try ('\r' <$ MP.string "\\r") <|>
-            MP.try ('\\' <$ MP.string "\\\\") <|>
-            MP.oneOf (' ':pathchars)
-        segment = (:) <$> MP.char '/' <*> MP.some pathchar
-        path = join <$> MP.some segment
-        localpath = join <$> ((:) <$> MP.string "." <*> MP.many segment)
-
-
-softend :: forall e m. (MP.MonadParsec e String m) => m String
-softend = space <* MP.eof
-
-
+(<:>) :: (MP.Stream a, MP.Stream b) => MP.Parsec () a b -> MP.Parsec () b c -> MP.Parsec () a c
+(<:>) p1 p2 = p1 >>= (\res -> case res of
+    Right x -> pure x
+    Left err -> MP.customFailure ()) . MP.parse p2 ""
 
 
