@@ -50,7 +50,7 @@ builfiles = [
     "file ./build/service.h << ./src <> src <> \"/weird dir\"  "
     ]
 
-testparseall :: Show a => MP.Parsec () String a -> [String] -> IO ()
+testparseall :: Show a => MP.Parsec String String a -> [String] -> IO ()
 testparseall parser cases = () <$ sequence ((\c -> print c *> MP.parseTest parser c) <$> cases)
 
 main :: IO ()

@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE LambdaCase #-}
 module Commons ((<:>), selectUntil, selectUntil1, stringLiteral) where
 
 import qualified Text.Megaparsec as MP
@@ -11,6 +10,7 @@ import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Void ( Void )
+import Data.Bits (Bits(xor))
 
 
 instance MP.ShowErrorComponent [Char] where
@@ -38,10 +38,12 @@ stringLiteral = (MP.char '"' *> MP.many term <* MP.char '"') <?> "string literal
             MP.noneOf "\\\""
 
 
-(<:>) :: (MP.Stream a, MP.Stream b, MP.VisualStream b, MP.TraversableStream b) => MP.Parsec String a b -> MP.Parsec String b c -> MP.Parsec String a c
-(<:>) p1 p2 = p1 >>= (\case
+(<:>) :: (MP.Stream a, MP.Stream b, Show b, MP.VisualStream b, MP.TraversableStream b) => MP.Parsec String a b -> MP.Parsec String b c -> MP.Parsec String a c
+(<:>) p1 p2 = do
+  res <- p1
+  case MP.parse p2 "" res of
     Right x -> pure x
-    Left err -> MP.customFailure ("<:> internal error:\n" <> indent (MP.errorBundlePretty err))) . MP.parse p2 ""
+    Left err -> MP.customFailure (show res <> " <:> ...\n" <> indent (MP.errorBundlePretty err))
       where
         indent = unlines . map ('\t' :) . lines
 

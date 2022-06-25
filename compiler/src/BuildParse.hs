@@ -26,13 +26,13 @@ data KitBuildLine
 
 
 name :: BuildParser String
-name = MP.label "name" $ selectUntil MP.space1 <:> (MP.many (MP.noneOf "\"") <* MP.eof)
+name = MP.label "name" $ selectUntil1 MP.space1 <:> (MP.many (MP.noneOf "\"") <* MP.eof)
 
 
 filepath :: BuildParser String
-filepath = MP.label "filepath" $ (MP.try stringLiteral <|> selectUntil MP.space1) <:> (inner <* MP.eof)
+filepath = MP.label "filepath" $ (MP.try stringLiteral <|> (selectUntil1 MP.space1 <:> (MP.many (MP.noneOf "\"") <* MP.eof))) <:> (inner <* MP.eof)
     where
-        step = (:) <$> MP.char '/' <*> MP.some (MP.noneOf "/\0")
+        step = MP.label "step" $ (:) <$> MP.char '/' <*> MP.some (MP.noneOf "/\0")
         inner =
             MP.try ((<$>) join $ (:) <$> MP.string "." <*> MP.many (MP.try step)) <|>
             MP.try ((<$>) join $ MP.some step) <|>
