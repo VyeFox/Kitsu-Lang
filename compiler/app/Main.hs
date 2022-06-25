@@ -8,4 +8,4 @@ import Commons
 import BuildParse
 
 main :: IO ()
-main = getLine >>= MP.parseTest (filepath <* MP.eof :: MP.Parsec () String String)
+main = getLine >>= MP.parseTest (filepath <* MP.eof :: MP.Parsec String String String)

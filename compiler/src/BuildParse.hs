@@ -8,7 +8,7 @@ import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
 
 
-type BuildParser = MP.Parsec () String
+type BuildParser = MP.Parsec String String
 
 
 data KitExpression

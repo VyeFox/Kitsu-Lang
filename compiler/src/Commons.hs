@@ -1,28 +1,32 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use lambda-case" #-}
-module Commons ((<:>), selectUntil, stringLiteral) where
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE LambdaCase #-}
+module Commons ((<:>), selectUntil, selectUntil1, stringLiteral) where
 
 import qualified Text.Megaparsec as MP
+import Text.Megaparsec ((<?>))
 import Control.Applicative ((<$), (<$>), (<|>))
 import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Void ( Void )
-import Text.Megaparsec (pos1)
 
 
-instance MP.ShowErrorComponent () where
-  showErrorComponent _ = "()"
+instance MP.ShowErrorComponent [Char] where
+  showErrorComponent str = str
 
 
-selectUntil :: (MP.Stream a) => MP.Parsec () a b -> MP.Parsec () a [MP.Token a]
+selectUntil :: (MP.Stream a) => MP.Parsec String a b -> MP.Parsec String a [MP.Token a]
 selectUntil p = MP.many $ MP.try $ MP.notFollowedBy p *> MP.anySingle
 
 
-stringLiteral :: MP.Parsec () String String
-stringLiteral = MP.char '"' *> MP.many term <* MP.char '"'
+selectUntil1 :: (MP.Stream a) => MP.Parsec String a b -> MP.Parsec String a [MP.Token a]
+selectUntil1 p = MP.some $ MP.try $ MP.notFollowedBy p *> MP.anySingle
+
+
+stringLiteral :: MP.Parsec String String String
+stringLiteral = (MP.char '"' *> MP.many term <* MP.char '"') <?> "string literal"
     where
         term =
             MP.try ('\"' <$ MP.string "\\\"") <|>
@@ -34,9 +38,9 @@ stringLiteral = MP.char '"' *> MP.many term <* MP.char '"'
             MP.noneOf "\\\""
 
 
-(<:>) :: (MP.Stream a, MP.Stream b) => MP.Parsec () a b -> MP.Parsec () b c -> MP.Parsec () a c
-(<:>) p1 p2 = p1 >>= (\res -> case res of
+(<:>) :: (MP.Stream a, MP.Stream b, MP.VisualStream b, MP.TraversableStream b) => MP.Parsec String a b -> MP.Parsec String b c -> MP.Parsec String a c
+(<:>) p1 p2 = p1 >>= (\case
     Right x -> pure x
-    Left err -> MP.customFailure ()) . MP.parse p2 ""
+    Left err -> MP.customFailure (MP.errorBundlePretty err)) . MP.parse p2 ""
 
 
