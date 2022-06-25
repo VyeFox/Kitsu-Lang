@@ -32,7 +32,7 @@ name = MP.label "name" $ selectUntil MP.space1 <:> (MP.many (MP.noneOf "\"") <* 
 filepath :: BuildParser String
 filepath = MP.label "filepath" $ (MP.try stringLiteral <|> selectUntil MP.space1) <:> (inner <* MP.eof)
     where
-        step = (:) <$> MP.char '/' <*> MP.some (MP.noneOf "/\\0")
+        step = (:) <$> MP.char '/' <*> MP.some (MP.noneOf "/\0")
         inner =
             MP.try ((<$>) join $ (:) <$> MP.string "." <*> MP.many (MP.try step)) <|>
             MP.try ((<$>) join $ MP.some step) <|>

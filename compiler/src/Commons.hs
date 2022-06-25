@@ -41,6 +41,8 @@ stringLiteral = (MP.char '"' *> MP.many term <* MP.char '"') <?> "string literal
 (<:>) :: (MP.Stream a, MP.Stream b, MP.VisualStream b, MP.TraversableStream b) => MP.Parsec String a b -> MP.Parsec String b c -> MP.Parsec String a c
 (<:>) p1 p2 = p1 >>= (\case
     Right x -> pure x
-    Left err -> MP.customFailure (MP.errorBundlePretty err)) . MP.parse p2 ""
+    Left err -> MP.customFailure ("<:> internal error:\n" <> indent (MP.errorBundlePretty err))) . MP.parse p2 ""
+      where
+        indent = unlines . map ('\t' :) . lines
 
 
