@@ -1,5 +1,20 @@
 # Kitsu-Lang
-Kitsu aims to combine the functional programming principles found in Haskell with classical procedural logic by leveraging reference safety and access rights.
-These access rights are specified by custom modifiers (alongside `mutable` and `const`) for use in C++ style (`const T &`) reference typing.
+Kitsu aims to apply the functional programming principles found in Haskell to an easy to use scripting language like JS.
 
 GHC-8.10.7 is used for stable HLS-1.7.0.0 integration.
+
+## Type System
+
+A closure is an object paired with a function that is only dependent on its state and its argument.
+
+**everything** is a closure.
+
+Closures (of type `SomeType`) are written
+* `{state...}::SomeType arg => result` defines type with behaviour
+* `SomeType{state...}` uses type to define behaviour
+
+There is also sugar for:
+* pure functions with anonymous type: `x => result`
+* closures with type `Object`: `{state...}`
+* closures of anonymous type: `{state...}::arg => result`
+
