@@ -35,7 +35,23 @@ stringLiteral = (MP.char '"' *> MP.many term <* MP.char '"') <?> "string literal
             MP.try ('\r' <$ MP.string "\\r") <|>
             MP.try ('\NUL' <$ MP.string "\\0") <|>
             MP.try ('\\' <$ MP.string "\\\\") <|>
-            MP.noneOf "\\\""
+            MP.noneOf ['\\', '\"']
+
+-- alternates between String and `a` 
+formatStringLiteral :: MP.Parsec String String a -> MP.Parsec String String ([(String, a)], String)
+formatStringLiteral p = MP.char '"' *> ((,) <$> MP.many (MP.try segment) <*> MP.many term) <* MP.char '"'
+  where
+    term =
+      MP.try ('\"' <$ MP.string "\\\"") <|>
+      MP.try ('\t' <$ MP.string "\\t") <|>
+      MP.try ('\n' <$ MP.string "\\n") <|>
+      MP.try ('\r' <$ MP.string "\\r") <|>
+      MP.try ('\NUL' <$ MP.string "\\0") <|>
+      MP.try ('\\' <$ MP.string "\\\\") <|>
+      MP.try ('{' <$ MP.string "\\{") <|> -- '{' denotes start of format block
+      MP.try ('}' <$ MP.string "\\}") <|> -- '}' denotes end of format block
+      MP.noneOf ['\\', '\"', '{', '}']
+    segment = (,) <$> MP.many term <*> (MP.char '{' *> p <* MP.char '}')
 
 
 (<:>) :: (MP.Stream a, MP.Stream b, Show b, MP.VisualStream b, MP.TraversableStream b) => MP.Parsec String a b -> MP.Parsec String b c -> MP.Parsec String a c

@@ -5,6 +5,7 @@ This section describes the built-in and standard types in Kitsu.
 These types cannot be re-defined within the confines of the language:
 * `Async` A type that represents a promise, the value is aquired by calling the instance with a throw-away value such as an empty tuple.
 * `Atomic` A special wrapper type that allows unique access to a value.
+* `Trait` A function with overloadable implementations.
 * `Bool` Choses between two values.
 * `Nat` A type that represents a unsigned integer.
 * `Int` A type that represents a signed integer.
@@ -15,10 +16,11 @@ These types cannot be re-defined within the confines of the language:
 
 The signatures of these types are:
 ```js
-Async: () => T;
-Atomic: Maybe (* => *) => Maybe *; // "nothing" is returned if the action would result in a deadlock.
+Async: () => X;
+Atomic: Maybe (X => X) => Maybe X; // "nothing" is returned if the action would result in a deadlock.
+Trait: (X => Maybe Y) => (X => Bool); // returns condition to check if overload is reached for a given value.
 Bool: * => * => *; // (x => y => x) if true, (x => y => y) if false.
-Nat: (* => *) => (* => *); // iterate value `n` times, where `n` is value represented by the Natural number.
+Nat: (X => X) => (X => X); // iterate value `n` times, where `n` is value represented by the Natural number.
 Type: * => Type; // returns the type of the argument
 ```
 

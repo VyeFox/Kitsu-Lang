@@ -22,8 +22,8 @@ source-repository head
 
 library
   exposed-modules:
-      BuildParse
       Commons
+      KitsuByteCode
   other-modules:
       Paths_compiler
   hs-source-dirs:
