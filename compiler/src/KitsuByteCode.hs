@@ -1,3 +1,4 @@
+module KitsuByteCode where
 
 -- Simple Data Types
 data Literal
@@ -8,12 +9,13 @@ data Literal
     | KitByte Int -- assume that the number is natural and less than 256
     | KitChar Char
     | KitClosureAddress Integer -- only valid in the context of an object notation
+    deriving (Eq, Show)
 
--- Types not Definable Within the Constrains of the Language
-data Primitives
+-- Functors not Definable Within the Constrains of the Language
+data Primitive
     = KitAsync Expression -- process expression asynchronously
     | KitAtomic Expression -- initial value of mutable variable
-    | KitTrait Expression -- default beheavior of overridable func
+    deriving (Show)
 
 -- Defines the behabiour of a function call
 data ClosureTypeDef = ClosureTypeDef {
@@ -21,40 +23,60 @@ data ClosureTypeDef = ClosureTypeDef {
     closureSelfAlias :: String,
     closureArgName :: String,
     closureBody :: Expression
-}
+} deriving (Show)
+
+-- Stores the hash of a closure definition body for checking equality across different processes
+newtype ClosureHashLookup = ClosureTypeHash {
+    closureHashDict :: [(String, Integer)]
+} deriving (Show)
+
+instance Semigroup ClosureHashLookup where
+    (ClosureTypeHash a) <> (ClosureTypeHash b) = ClosureTypeHash (a <> b)
+
+instance Monoid ClosureHashLookup where
+    mempty = ClosureTypeHash []
 
 -- General form of an expression
 data Expression
     = Name String -- local variable
     | Lit Literal -- literal
+    | Prim Primitive -- primitive
     | App Expression Expression -- function application
     | Closure String [(String, Expression)] -- closure
     | GetProp Expression String -- get property of a closure
+    deriving (Show)
 
 data KitsuGlobal = KitsuGlobal {
     kitsuDependencies :: [String], -- list of modules that this file depends on
     kitsuTypeDefs :: [ClosureTypeDef],
     kitsuVarDefs :: [(String, Expression)]
-}
+} deriving (Show)
 
 -- Form of a module
 data Module = Module
     KitsuGlobal
+    ClosureHashLookup
     [String] -- exported names
+    deriving (Show)
 
 -- Form of process interface components
 data ProcessCallDef = ProcessCallDef {
     procCallName :: String,
     procCallArg :: String,
     procCallExpr :: Expression
-}
+} deriving (Show)
 
 -- Form of a program, variables 'cmdargs' and 'process' are automatically added to the environment
 data Program = Program 
     KitsuGlobal
-    [ProcessCallDef]
+    ClosureHashLookup
+    [ProcessCallDef] -- process interface
+    deriving (Show)
 
--- Object notation, KitClosureAddress is valid here
+-- Object notation, KitClosureAddress is valid here to link to other closures
 data KitsuObjectNotation = KitsuObjectNotation
-    Expression
-    [Expression]
+    [ClosureTypeDef]
+    ClosureHashLookup
+    Expression -- object
+    [Expression] -- context
+    deriving (Show)

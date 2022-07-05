@@ -5,7 +5,6 @@ This section describes the built-in and standard types in Kitsu.
 These types cannot be re-defined within the confines of the language:
 * `Async` A type that represents a promise, the value is aquired by calling the instance with a throw-away value such as an empty tuple.
 * `Atomic` A special wrapper type that allows unique access to a value.
-* `Trait` A function with overloadable implementations.
 * `Bool` Choses between two values.
 * `Nat` A type that represents a unsigned integer.
 * `Int` A type that represents a signed integer.
@@ -17,8 +16,7 @@ These types cannot be re-defined within the confines of the language:
 The signatures of these types are:
 ```js
 Async: () => X;
-Atomic: Maybe (X => X) => Maybe X; // "nothing" is returned if the action would result in a deadlock.
-Trait: (X => Maybe Y) => (X => Bool); // returns condition to check if overload is reached for a given value.
+Atomic: (X => Y) => Maybe Y; // "nothing" is returned if the action would result in a deadlock.
 Bool: * => * => *; // (x => y => x) if true, (x => y => y) if false.
 Nat: (X => X) => (X => X); // iterate value `n` times, where `n` is value represented by the Natural number.
 Type: * => Type; // returns the type of the argument
@@ -28,7 +26,7 @@ Type: * => Type; // returns the type of the argument
 These operations cannot be re-defined within the confines of the language and are often represented by keywords:
 * `async` A keyword that represents an asynchronous operation.
 * `atomic` A keyword that represents an atomic value.
-* `is` Checks for referential or primitive equality.
+* `is` Checks for primitive equality.
 * `obj.prop` Accesses a property of an object, throws an error if the property does not exist.
 * `obj?prop` Checks if a property of an object exists.
 
@@ -46,6 +44,7 @@ These types are defined in the language and are available to all processes:
 * `Real` A type that represents a real number.
 * `Fold` A tuple modeled as a linked list.
 * `Match` A queryable predicate for deep type checking.
+* `Trait` A function with overloadable implementation.
 
 implimentation:
 ```js
