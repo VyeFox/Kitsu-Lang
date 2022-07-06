@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module KitsuComponents (parseLiteral, parseObjNotationLiteral, parsePrimitive, parseExpression) where
+module KitsuComponents (parseLiteral, parseObjNotationLiteral, parsePrimitive, parseClosure, parseExpression) where
 
 import KitsuByteCode
 
@@ -10,7 +10,7 @@ import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Void ( Void )
-import Data.Ratio
+import Data.Ratio ( (%) )
 
 
 data TypeDefAttached a = TypeDefAttached [ClosureTypeDef] ClosureHashLookup a
@@ -23,7 +23,6 @@ instance Applicative TypeDefAttached where
   TypeDefAttached xs h f <*> TypeDefAttached ys i a = TypeDefAttached (xs ++ ys) (h <> i) (f a)
 
 instance Monad TypeDefAttached where
-  return = pure
   m >>= f = (\case TypeDefAttached ys i (TypeDefAttached xs h a) -> TypeDefAttached (xs ++ ys) (h <> i) a) (f <$> m)
 
 parseIntegral :: (Num a, Ord e) => MP.ParsecT e String m a
@@ -74,8 +73,8 @@ escapedChar = MP.label "char" $
 sign :: (Num a, Ord e) => MP.ParsecT e String m (a -> a)
 sign = (id <$ MP.char '+') <|> (\x -> -x) <$ MP.char '-'
 
-regularName :: (Ord e) => MP.ParsecT e String m String
-regularName = MP.label "prop name" $ (:) <$> startChar <*> MP.many restChar
+textName :: (Ord e) => MP.ParsecT e String m String
+textName = MP.label "prop name" $ (:) <$> startChar <*> MP.many restChar
   where
     startChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
     restChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
@@ -85,10 +84,12 @@ symbolicName = MP.label "var name" $ MP.some $ MP.oneOf "$%^&*-+=<>|?!:,/~"
 
 parseLiteral :: Ord e => MP.ParsecT e String m Literal
 parseLiteral = MP.label "literal" $
-  MP.try parseBool <|> -- raw-text
-  MP.try parseByte <|> MP.try parseNat <|> -- unsigned-literal
-  MP.try parseRat <|> MP.try parseInt <|> -- signed-literal
-  parseChar -- string-literal
+  MP.try parseBool <|>
+  MP.try parseByte <|>
+  MP.try parseNat <|>
+  MP.try parseRat <|>
+  MP.try parseInt <|> 
+  parseChar
     where
       parseBool = (KitBool True <$ MP.string "true") <|> (KitBool False <$ MP.string "false")
       parseNat = KitNat <$> parseIntegral
@@ -104,13 +105,38 @@ parseObjNotationLiteral = MP.label "object-notation-literal" $
     where
       parseRef = KitClosureAddress <$> (MP.char '&' *> parseIntegral)
 
-parsePrimitive :: Ord e => MP.ParsecT e String m Primitive
-parsePrimitive = MP.label "primitive" $
-  MP.try (KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression)) <|>
-  KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression)
+parsePrimitive :: Ord e => MP.ParsecT e String m Literal -> MP.ParsecT e String m Primitive
+parsePrimitive lit = MP.label "primitive" $
+  MP.try (KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression lit)) <|>
+  KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression lit)
+
+parseClosure :: Ord e => MP.ParsecT e String m Literal -> MP.ParsecT e String m Expression
+parseClosure lit = MP.label "closure" $
+  Closure "Object" <$> objectBody
+    where
+      keyvalue = MP.label "key-value-pair" $ (,) <$> (textName <* MP.space) <*> (MP.char ':' *> MP.space *> parseExpression lit)
+      objectInner = (:) <$> keyvalue <*> MP.many (MP.try $ MP.space *> MP.char ',' *> MP.space *> keyvalue)
+      objectBody = MP.label "closure-body" $
+        MP.try (MP.char '{' *> MP.space *> objectInner <* MP.space <* MP.char '}') <|>
+        [] <$ MP.char '{' <* MP.space <* MP.char '}'
 
 -- *: Expression parser includes bracketed expressions.
 -- TODO: FUTURE: parse `$` syntax for formatted expressions.
 -- TODO: FUTURE: parse `do{...}` syntax for procedural logic.
-parseExpression :: Ord e => MP.ParsecT e String m Expression
-parseExpression = Lit (KitChar '\NUL') <$ MP.eof -- TODO: define this
+parseExpression :: Ord e => MP.ParsecT e String m Literal -> MP.ParsecT e String m Expression
+parseExpression lit = MP.label "expression" $
+  value -- TODO: actually define this
+    where
+      this = parseExpression lit
+      value =
+        MP.try (Lit <$> lit) <|>
+        MP.try (Prim <$> parsePrimitive lit)
+      regularFunc =
+        MP.try (Name <$> textName) <|>
+        MP.try (MP.char '(' *> (Name <$> symbolicName) <* MP.char ')') <|>
+        MP.char '(' *> MP.space *> this <* MP.space <* MP.char ')'
+      inlineFunc =
+        MP.try (Name <$> symbolicName) <|>
+        MP.try (MP.char '`' *> (Name <$> textName) <* MP.char '`') <|>
+        MP.string "`(" *> MP.space *> this <* MP.space <* MP.string ")`"
+
