@@ -99,7 +99,7 @@ sign = (id <$ MP.char '+') <|> (\x -> -x) <$ MP.char '-'
 textName :: (Ord e) => MP.Parsec e String String
 textName = MP.label "prop name" $ (:) <$> startChar <*> MP.many restChar
   where
-    startChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+    startChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" -- underscore is reserved for internal use
     restChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
 
 symbolicName :: (Ord e) => MP.Parsec e String String
@@ -143,6 +143,7 @@ parseClosure :: (Ord e, KitParseMonad m) => MP.Parsec e String (m Literal) -> MP
 parseClosure lit = MP.label "closure" $
   MP.try constructed <|>
   MP.try initialTypeDef <|>
+  MP.try lambda <|>
   jsobj
     where
       keyvalue = MP.label "key-value-pair" $ getCompose $ (,) <$> Compose ((<$>) pure $ textName <* MP.space) <*> Compose (MP.char ':' *> MP.space *> parseExpression lit)
@@ -150,9 +151,8 @@ parseClosure lit = MP.label "closure" $
       objectBody = MP.label "closure-body" $
         MP.try (MP.char '{' *> MP.space *> objectInner <* MP.space <* MP.char '}') <|>
         pure [] <$ MP.char '{' <* MP.space <* MP.char '}'
-      function = MP.label "function-def" $ do
-        typename <- textName
-        MP.space1
+      function tname_space = MP.label "function-def" $ do
+        typename <- tname_space
         argname <- textName
         MP.space1
         MP.string "=>"
@@ -163,8 +163,11 @@ parseClosure lit = MP.label "closure" $
       initialTypeDef = do
         objbod <- objectBody
         MP.string "::"
-        typename <- function
+        typename <- function textName <* MP.space1
         return $ Closure <$> typename <*> objbod
+      lambda = do
+        internalname <- function (MP.sourcePosPretty <$> MP.getSourcePos)
+        return $ Closure <$> internalname <*> pure []
       jsobj = (<$>) (Closure "Object") <$> objectBody
 
 -- *: Expression parser includes bracketed expressions.
@@ -182,6 +185,10 @@ parseExpression lit =
         MP.try ((<$>) pure $ Name <$> textName) <|>
         MP.try (MP.char '(' *> (<$>) pure (Name <$> symbolicName) <* MP.char ')') <|>
         MP.char '(' *> MP.space *> this <* MP.space <* MP.char ')'
+      propdrill = do
+        obj <- regularFunc
+        props <- pure <$> MP.many (MP.try $ MP.space *> MP.char '.' *> MP.space *> textName)
+        return $ foldl GetProp <$> obj <*> props
       inlineFunc = MP.label "operator" $
         MP.try ((<$>) pure $ Name <$> symbolicName) <|>
         MP.try (MP.char '`' *> (<$>) pure (Name <$> textName) <* MP.char '`') <|>
@@ -189,13 +196,13 @@ parseExpression lit =
       component = MP.label "value" $
         MP.try (parseClosure lit) <|>
         MP.try value <|>
-        MP.try regularFunc
+        propdrill
       currychain = do
         first <- component
         rest <- sequenceA <$> MP.many (MP.try $ MP.space1 *> component)
         return $ foldl Apply <$> first <*> rest
       operatorfold = do
-        opfolds <- sequenceA <$> MP.many (MP.try $ getCompose $ (\lhs operator -> inline operator lhs) <$> Compose currychain <*> Compose (MP.space1 *> inlineFunc <* MP.space1))
+        opfolds <- sequenceA <$> MP.many (MP.try $ getCompose $ flip inline <$> Compose currychain <*> Compose (MP.space1 *> inlineFunc <* MP.space1))
         terminalchain <- currychain
         return $ foldr ($) <$> terminalchain <*> opfolds
 
