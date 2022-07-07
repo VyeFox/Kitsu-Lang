@@ -6,8 +6,9 @@ import Data.Void ( Void )
 
 import KitsuByteCode (Expression)
 import KitsuComponents (parseLiteral, parseClosure)
+import Data.Functor.Identity (Identity)
 
 main :: IO ()
 main = do
     res <- getLine
-    MP.parseTest (parseClosure parseLiteral <* MP.eof :: MP.Parsec Void String Expression) res
+    MP.parseTest (parseClosure parseLiteral <* MP.eof) res

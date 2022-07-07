@@ -12,7 +12,6 @@ import qualified Text.Megaparsec.Error as MP
 import Data.Void ( Void )
 import Data.Ratio ( (%) )
 
-
 data TypeDefAttached a = TypeDefAttached [ClosureTypeDef] ClosureHashLookup a
 
 instance Functor TypeDefAttached where
