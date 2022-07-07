@@ -5,10 +5,10 @@ import qualified Text.Megaparsec.Char as MP
 import Data.Void ( Void )
 
 import KitsuByteCode (Expression)
-import KitsuComponents (parseLiteral, parseClosure, TypeDefAttached)
+import KitsuComponents (parseLiteral, parseExpression, TypeDefAttached)
 import Data.Functor.Identity (Identity)
 
 main :: IO ()
 main = do
     res <- getLine
-    MP.parseTest (parseClosure parseLiteral <* MP.eof :: MP.Parsec Void String (TypeDefAttached Expression)) res
+    MP.parseTest (parseExpression parseLiteral <* MP.eof :: MP.Parsec Void String (TypeDefAttached Expression)) res

@@ -1,7 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
-module KitsuComponents (TypeDefAttached, parseLiteral, parseObjNotationLiteral, parsePrimitive, parseClosure, parseExpression) where
+module KitsuComponents (
+  KitParseMonad,
+  TypeDefAttached (TypeDefAttached), liftTypeDefAttached,
+  parseLiteral,
+  parseObjNotationLiteral,
+  parsePrimitive,
+  parseClosure,
+  parseExpression
+) where
 
 import KitsuByteCode
+import KitsuPreludeConnection (inline)
 
 import qualified Text.Megaparsec as MP
 import Text.Megaparsec ((<?>))
@@ -13,22 +22,22 @@ import Data.Void ( Void )
 import Data.Ratio ( (%) )
 import Data.Functor.Compose (Compose (Compose), getCompose)
 
-data TypeDefAttached a = TypeDefAttached [ClosureTypeDef] ClosureHashLookup a deriving (Show)
+data TypeDefAttached a = TypeDefAttached [ClosureTypeDef] [ClosureTypeHash] a deriving (Show)
 
 -- trivial derivations of functor typeclasses
 instance Functor TypeDefAttached where
-  fmap f (TypeDefAttached xs h a) = TypeDefAttached xs h (f a)
+  fmap f (TypeDefAttached xs hs a) = TypeDefAttached xs hs (f a)
 instance Applicative TypeDefAttached where
   pure = TypeDefAttached [] mempty
-  TypeDefAttached xs h f <*> TypeDefAttached ys i a = TypeDefAttached (xs ++ ys) (h <> i) (f a)
+  TypeDefAttached xs hs f <*> TypeDefAttached ys is a = TypeDefAttached (xs ++ ys) (hs ++ is) (f a)
 instance Monad TypeDefAttached where
-  m >>= f = (\case TypeDefAttached ys i (TypeDefAttached xs h a) -> TypeDefAttached (xs ++ ys) (h <> i) a) (f <$> m)
+  m >>= f = (\case TypeDefAttached ys is (TypeDefAttached xs hs a) -> TypeDefAttached (xs ++ ys) (hs ++ is) a) (f <$> m)
 instance Semigroup a => Semigroup (TypeDefAttached a) where
   ma <> mb = (<>) <$> ma <*> mb
 instance Foldable TypeDefAttached where
   foldMap f (TypeDefAttached _ _ a) = f a
 instance Traversable TypeDefAttached where
-  traverse f (TypeDefAttached xs h a) = TypeDefAttached xs h <$> f a
+  traverse f (TypeDefAttached xs hs a) = TypeDefAttached xs hs <$> f a
 
 -- custom side effect interface
 class Monad m => KitParseMonad m where
@@ -94,7 +103,9 @@ textName = MP.label "prop name" $ (:) <$> startChar <*> MP.many restChar
     restChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
 
 symbolicName :: (Ord e) => MP.Parsec e String String
-symbolicName = MP.label "var name" $ MP.some $ MP.oneOf "$%^&*-+=<>|?!:,/~"
+symbolicName = MP.label "var name" $
+  MP.notFollowedBy (MP.string "=>") *>
+  MP.some (MP.oneOf "$%^&*-+=<>|?!:,/~")
 
 -- === KITPARSEMONAD PARSERS ===
 
@@ -130,20 +141,38 @@ parsePrimitive lit = MP.label "primitive" $
 
 parseClosure :: (Ord e, KitParseMonad m) => MP.Parsec e String (m Literal) -> MP.Parsec e String (m Expression)
 parseClosure lit = MP.label "closure" $
-  (<$>) (Closure "Object") <$> objectBody
+  MP.try constructed <|>
+  MP.try initialTypeDef <|>
+  jsobj
     where
       keyvalue = MP.label "key-value-pair" $ getCompose $ (,) <$> Compose ((<$>) pure $ textName <* MP.space) <*> Compose (MP.char ':' *> MP.space *> parseExpression lit)
       objectInner = getCompose $ (:) <$> Compose keyvalue <*> Compose (sequenceA <$> MP.many (MP.try $ MP.space *> MP.char ',' *> MP.space *> keyvalue))
       objectBody = MP.label "closure-body" $
         MP.try (MP.char '{' *> MP.space *> objectInner <* MP.space <* MP.char '}') <|>
         pure [] <$ MP.char '{' <* MP.space <* MP.char '}'
+      function = MP.label "function-def" $ do
+        typename <- textName
+        MP.space1
+        argname <- textName
+        MP.space1
+        MP.string "=>"
+        MP.space1
+        body <- parseExpression lit
+        return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename "self" argname <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure typename
+      constructed = getCompose $ Closure <$> Compose (pure <$> textName) <*> Compose objectBody
+      initialTypeDef = do
+        objbod <- objectBody
+        MP.string "::"
+        typename <- function
+        return $ Closure <$> typename <*> objbod
+      jsobj = (<$>) (Closure "Object") <$> objectBody
 
 -- *: Expression parser includes bracketed expressions.
 -- TODO: FUTURE: parse `$` syntax for formatted expressions.
 -- TODO: FUTURE: parse `do{...}` syntax for procedural logic.
 parseExpression :: (Ord e, KitParseMonad m) => MP.Parsec e String (m Literal) -> MP.Parsec e String (m Expression)
-parseExpression lit = MP.label "expression" $
-  value -- TODO: actually define this
+parseExpression lit =
+  operatorfold
     where
       this = parseExpression lit -- expression parser recursively calls itself
       value =
@@ -153,8 +182,20 @@ parseExpression lit = MP.label "expression" $
         MP.try ((<$>) pure $ Name <$> textName) <|>
         MP.try (MP.char '(' *> (<$>) pure (Name <$> symbolicName) <* MP.char ')') <|>
         MP.char '(' *> MP.space *> this <* MP.space <* MP.char ')'
-      inlineFunc =
+      inlineFunc = MP.label "operator" $
         MP.try ((<$>) pure $ Name <$> symbolicName) <|>
         MP.try (MP.char '`' *> (<$>) pure (Name <$> textName) <* MP.char '`') <|>
         MP.string "`(" *> MP.space *> this <* MP.space <* MP.string ")`"
+      component = MP.label "value" $
+        MP.try (parseClosure lit) <|>
+        MP.try value <|>
+        MP.try regularFunc
+      currychain = do
+        first <- component
+        rest <- sequenceA <$> MP.many (MP.try $ MP.space1 *> component)
+        return $ foldl Apply <$> first <*> rest
+      operatorfold = do
+        opfolds <- sequenceA <$> MP.many (MP.try $ getCompose $ (\lhs operator -> inline operator lhs) <$> Compose currychain <*> Compose (MP.space1 *> inlineFunc <* MP.space1))
+        terminalchain <- currychain
+        return $ foldr ($) <$> terminalchain <*> opfolds
 

@@ -22,9 +22,10 @@ source-repository head
 
 library
   exposed-modules:
-      Commons
       KitsuByteCode
       KitsuComponents
+      KitsuPrelude
+      KitsuPreludeConnection
   other-modules:
       Paths_compiler
   hs-source-dirs:

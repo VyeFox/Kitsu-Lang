@@ -26,22 +26,16 @@ data ClosureTypeDef = ClosureTypeDef {
 } deriving (Show)
 
 -- Stores the hash of a closure definition body for checking equality across different processes
-newtype ClosureHashLookup = ClosureTypeHash {
-    closureHashDict :: [(String, Integer)]
+newtype ClosureTypeHash = ClosureTypeHash {
+    closureHash :: (String, Integer)
 } deriving (Show)
-
-instance Semigroup ClosureHashLookup where
-    (ClosureTypeHash a) <> (ClosureTypeHash b) = ClosureTypeHash (a <> b)
-
-instance Monoid ClosureHashLookup where
-    mempty = ClosureTypeHash []
 
 -- General form of an expression
 data Expression
     = Name String -- local variable
     | Lit Literal -- literal
     | Prim Primitive -- primitive
-    | App Expression Expression -- function application
+    | Apply Expression Expression -- function application
     | Closure String [(String, Expression)] -- closure
     | GetProp Expression String -- get property of a closure
     deriving (Show)
@@ -55,7 +49,7 @@ data KitsuGlobal = KitsuGlobal {
 -- Form of a module
 data Module = Module
     KitsuGlobal
-    ClosureHashLookup
+    [ClosureTypeHash]
     [String] -- exported names
     deriving (Show)
 
@@ -69,14 +63,14 @@ data ProcessCallDef = ProcessCallDef {
 -- Form of a program, variables 'cmdargs' and 'process' are automatically added to the environment
 data Program = Program 
     KitsuGlobal
-    ClosureHashLookup
+    [ClosureTypeHash]
     [ProcessCallDef] -- process interface
     deriving (Show)
 
 -- Object notation, KitClosureAddress is valid here to link to other closures
 data KitsuObjectNotation = KitsuObjectNotation
-    [ClosureTypeDef]
-    ClosureHashLookup
+    [ClosureTypeDef] -- only for lambdas
+    [ClosureTypeHash]
     Expression -- object
     [Expression] -- context
     deriving (Show)
