@@ -202,7 +202,7 @@ parseExpression lit =
         rest <- sequenceA <$> MP.many (MP.try $ MP.space1 *> component)
         return $ foldl Apply <$> first <*> rest
       operatorfold = do
-        opfolds <- sequenceA <$> MP.many (MP.try $ getCompose $ flip inline <$> Compose currychain <*> Compose (MP.space1 *> inlineFunc <* MP.space1))
-        terminalchain <- currychain
-        return $ foldr ($) <$> terminalchain <*> opfolds
+        initialchain <- currychain
+        opfolds <- sequenceA <$> MP.many (MP.try $ getCompose $ (\operator rhs lhs -> inline operator lhs rhs) <$> Compose (MP.space1 *> inlineFunc <* MP.space1) <*> Compose currychain)
+        return $ foldl (\lhs op_rhs -> op_rhs lhs) <$> initialchain <*> opfolds
 
