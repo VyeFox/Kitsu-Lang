@@ -12,17 +12,28 @@ import qualified Text.Megaparsec.Error as MP
 import Data.Void ( Void )
 import Data.Ratio ( (%) )
 
+import Data.Functor.Compose (Compose (Compose), getCompose)
+import ComposeTools (fCompose, inner)
+
 data TypeDefAttached a = TypeDefAttached [ClosureTypeDef] ClosureHashLookup a
 
+-- trivial derivations of functor typeclasses
 instance Functor TypeDefAttached where
   fmap f (TypeDefAttached xs h a) = TypeDefAttached xs h (f a)
-
 instance Applicative TypeDefAttached where
   pure = TypeDefAttached [] mempty
   TypeDefAttached xs h f <*> TypeDefAttached ys i a = TypeDefAttached (xs ++ ys) (h <> i) (f a)
-
 instance Monad TypeDefAttached where
   m >>= f = (\case TypeDefAttached ys i (TypeDefAttached xs h a) -> TypeDefAttached (xs ++ ys) (h <> i) a) (f <$> m)
+instance Semigroup a => Semigroup (TypeDefAttached a) where
+  ma <> mb = (<>) <$> ma <*> mb
+instance Foldable TypeDefAttached where
+  foldMap f (TypeDefAttached _ _ a) = f a
+instance Traversable TypeDefAttached where
+  traverse f (TypeDefAttached xs h a) = TypeDefAttached xs h <$> f a
+
+class (Monad m) => KitParseMonad m where
+  pureTypeDefAttached :: TypeDefAttached a ->  m a
 
 parseIntegral :: (Num a, Ord e) => MP.ParsecT e String m a
 parseIntegral = foldl (\ s dig -> s*10 + dig) 0 <$> MP.some digit
