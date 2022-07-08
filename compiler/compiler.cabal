@@ -26,6 +26,8 @@ library
       KitsuComponents
       KitsuPrelude
       KitsuPreludeConnection
+      KitsuSeasoning
+      KitsuSpiceRack
   other-modules:
       Paths_compiler
   hs-source-dirs:

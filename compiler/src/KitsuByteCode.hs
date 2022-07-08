@@ -8,7 +8,6 @@ data Literal
     | KitRat Rational
     | KitByte Int -- assume that the number is natural and less than 256
     | KitChar Char
-    | KitClosureAddress Integer -- only valid in the context of an object notation
     deriving (Eq, Show)
 
 -- Functors not Definable Within the Constrains of the Language
@@ -68,7 +67,7 @@ data Program = Program
     [ProcessCallDef] -- process interface
     deriving (Show)
 
--- Object notation, KitClosureAddress is valid here to link to other closures
+-- Object notation
 data KitsuObjectNotation = KitsuObjectNotation
     [ClosureTypeDef] -- only for lambdas
     [ClosureTypeHash]
