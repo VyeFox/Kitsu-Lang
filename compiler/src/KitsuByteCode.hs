@@ -38,6 +38,7 @@ data Expression
     | Apply Expression Expression -- function application
     | Closure String [(String, Expression)] -- closure
     | GetProp Expression String -- get property of a closure
+    | CoDef [(String, Expression)] Expression -- define multiple values in paralelle for self / sister reference
     deriving (Show)
 
 data KitsuGlobal = KitsuGlobal {

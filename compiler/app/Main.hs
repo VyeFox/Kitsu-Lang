@@ -6,7 +6,6 @@ import Data.Void ( Void )
 
 import KitsuByteCode (Expression)
 import KitsuComponents (parseLiteral, parseExpression, TypeDefAttached)
-import Data.Functor.Identity (Identity)
 
 main :: IO ()
 main = do

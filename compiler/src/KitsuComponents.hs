@@ -97,15 +97,15 @@ sign :: (Num a, Ord e) => MP.Parsec e String (a -> a)
 sign = (id <$ MP.char '+') <|> (\x -> -x) <$ MP.char '-'
 
 textName :: (Ord e) => MP.Parsec e String String
-textName = MP.label "prop name" $ (:) <$> startChar <*> MP.many restChar
+textName = MP.label "name" $ (:) <$> startChar <*> MP.many restChar
   where
     startChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" -- underscore is reserved for internal use
     restChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
 
 symbolicName :: (Ord e) => MP.Parsec e String String
-symbolicName = MP.label "var name" $
+symbolicName = MP.label "symbol" $
   MP.notFollowedBy (MP.string "=>") *>
-  MP.some (MP.oneOf "$%^&*-+=<>|?!:,/~")
+  MP.some (MP.oneOf "$%^&*-+=<>[]|?!:/~")
 
 -- === KITPARSEMONAD PARSERS ===
 
@@ -153,17 +153,23 @@ parseClosure lit = MP.label "closure" $
         pure [] <$ MP.char '{' <* MP.space <* MP.char '}'
       function tname_space = MP.label "function-def" $ do
         typename <- tname_space
-        argname <- textName
+        argname <-
+          MP.try textName <|>
+          MP.try symbolicName <|>
+          ("" <$ MP.char '_') -- discard arg
         MP.space1
-        MP.string "=>"
+        selfalias <-
+          MP.try ("self" <$ MP.string "=>") <|>
+          MP.try ("" <$ MP.string "[]=>") <|> -- un-usable name, syntax for pure functions
+          (MP.char '[' *> (MP.try textName <|> symbolicName) <* MP.string "]=>")
         MP.space1
         body <- parseExpression lit
-        return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename "self" argname <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure typename
+        return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename selfalias argname <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure typename
       constructed = getCompose $ Closure <$> Compose (pure <$> textName) <*> Compose objectBody
       initialTypeDef = do
         objbod <- objectBody
         MP.string "::"
-        typename <- function textName <* MP.space1
+        typename <- function (textName <* MP.space1)
         return $ Closure <$> typename <*> objbod
       lambda = do
         internalname <- function (MP.sourcePosPretty <$> MP.getSourcePos)
@@ -171,13 +177,20 @@ parseClosure lit = MP.label "closure" $
       jsobj = (<$>) (Closure "Object") <$> objectBody
 
 -- *: Expression parser includes bracketed expressions.
--- TODO: FUTURE: parse `$` syntax for formatted expressions.
--- TODO: FUTURE: parse `do{...}` syntax for procedural logic.
 parseExpression :: (Ord e, KitParseMonad m) => MP.Parsec e String (m Literal) -> MP.Parsec e String (m Expression)
 parseExpression lit =
+  MP.try codef <|>
   operatorfold
     where
       this = parseExpression lit -- expression parser recursively calls itself
+      codef = MP.label "${...}" $ do
+        MP.string "${" <* MP.space
+        defs <- (<$>) sequenceA $ MP.many $ MP.try $ MP.label "declaration" $ getCompose $ (,)
+          <$> Compose ((<$>) pure $ MP.try textName <|> symbolicName)
+          <*> Compose (MP.space1 *> MP.char '=' *> MP.space1 *> this <* MP.space <* MP.char ';' <* MP.space)
+        MP.char '}'
+        val <- MP.space *> this
+        return $ CoDef <$> defs <*> val
       value =
         MP.try ((<$>) Lit <$> lit) <|>
         MP.try ((<$>) Prim <$> parsePrimitive lit)
