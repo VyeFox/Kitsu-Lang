@@ -13,6 +13,7 @@ import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Functor.Compose (Compose (Compose), getCompose)
 
+-- TODO: ...Till refacor aware.
 parseModule :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String KitsuModule
 parseModule seasoning = do
     imps <- imports

@@ -109,6 +109,7 @@ stringLiteral = Seasoning {
     herbs = const MP.empty
   }
 
+-- TODO: ...Till refactor aware.
 tupleLiteral :: (Ord e, Monad m) => Seasoning m e
 tupleLiteral = Seasoning {
     salt = MP.empty,
@@ -135,6 +136,7 @@ offlineExport = Seasoning {
       <* MP.space <* MP.char ';'
   }
 
+-- TODO: ...Till refactor aware.
 typeDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
 typeDefinition = Seasoning {
     salt = MP.empty,

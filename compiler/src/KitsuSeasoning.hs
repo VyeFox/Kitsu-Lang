@@ -109,6 +109,7 @@ instance KitParseMonad ParseKernel where
 instance (Show a) => Show (ParseKernel a) where
     show ker = show $ getCompose <$> getCompose (getParseKernel ker)
 
+-- TODO: ...Till refactor aware.
 data Seasoning m e = Seasoning {
         salt :: MP.Parsec e String (m Literal), -- how to parse literals
         sugar :: MP.Parsec e String (m Expression) -> MP.Parsec e String (m Expression), -- inner expression component

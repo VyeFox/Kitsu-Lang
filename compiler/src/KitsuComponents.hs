@@ -40,6 +40,7 @@ parsePrimitive seasoning = MP.label "primitive" $
   MP.try ((<$>) KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression seasoning)) <|>
   (<$>) KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression seasoning)
 
+-- TODO: ...Till refactor aware.
 parseClosure :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m Expression)
 parseClosure seasoning = MP.label "closure" $
   MP.try constructed <|>
@@ -76,7 +77,7 @@ parseClosure seasoning = MP.label "closure" $
         return $ Closure <$> internalname <*> pure []
       jsobj = (<$>) (Closure "Object") <$> objectBody
 
--- *: Expression parser includes bracketed expressions.
+-- TODO: ...Till refector target.
 parseExpression :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m Expression)
 parseExpression seasoning =
   MP.try codef <|>
