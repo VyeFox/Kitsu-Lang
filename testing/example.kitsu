@@ -1,0 +1,9 @@
+
+
+export ::Vect other => Vect{
+    x: self.x + other.x,
+    y: self.y + other.y,
+    z: self.z + other.z
+};
+
+export + = vects => vacts.rest.val vects.val;

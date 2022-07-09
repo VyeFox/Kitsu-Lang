@@ -61,7 +61,6 @@ parseClosure seasoning = MP.label "closure" $
         MP.space1
         selfalias <-
           MP.try ("self" <$ MP.string "=>") <|>
-          MP.try ("" <$ MP.string "[]=>") <|> -- un-usable name, syntax for pure functions
           (MP.char '[' *> (MP.try textName <|> symbolicName) <* MP.string "]=>")
         MP.space1
         body <- parseExpression seasoning
@@ -70,7 +69,7 @@ parseClosure seasoning = MP.label "closure" $
       initialTypeDef = do
         objbod <- objectBody
         MP.string "::"
-        typename <- function (textName <* MP.space1)
+        typename <- function (MP.try (textName <* MP.space1) <|> (MP.sourcePosPretty <$> MP.getSourcePos <* MP.space1))
         return $ Closure <$> typename <*> objbod
       lambda = do
         internalname <- function (MP.sourcePosPretty <$> MP.getSourcePos)

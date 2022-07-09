@@ -1,7 +1,14 @@
-module KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral) where
+module KitsuSpiceRack (
+  mayexport,
+  simpleLiterals,
+  stringLiteral,
+  tupleLiteral,
+  typeDefinition,
+  offlineExport
+) where
 
 import KitsuByteCode
-import KitsuSeasoning (Seasoning(..), KitParseMonad(..), TypeDefAttached(..), AfterImportAction(..))
+import KitsuSeasoning (Seasoning(..), KitParseMonad(..), TypeDefAttached(..), AfterImportAction(..), ExportNames(..))
 import KitsuPreludeConnection (emptyTuple)
 import KitsuComponents (textName, symbolicName)
 
@@ -76,62 +83,81 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
       parseByte = KitByte <$> ((\x' x -> 16*x' + x) <$> (MP.string "0x" *> hex) <*> hex)
       parseChar = KitChar <$> (MP.char '\'' *> escapedChar <* MP.char '\'')
 
+mayexport :: (Ord e, KitParseMonad m) => MP.Parsec e String (m String) -> MP.Parsec e String (m ())
+mayexport s = do
+  action <-
+    MP.try ((\str -> liftExportNames (ExportNames [str] ())) <$ MP.string "export" <* MP.space1) <|>
+    ((\str -> pure ()) <$ MP.notFollowedBy MP.empty)
+  rest <- s
+  return $ rest >>= action
+
 simpleLiterals :: (Ord e, Monad m) => Seasoning m e
 simpleLiterals = Seasoning {
-        salt = parseLiteral,
-        sugar = const MP.empty,
-        herbs = const MP.empty
-    }
+    salt = parseLiteral,
+    sugar = const MP.empty,
+    herbs = const MP.empty
+  }
 
 stringLiteral :: (Ord e, Monad m) => Seasoning m e
 stringLiteral = Seasoning {
-        salt = MP.empty,
-        sugar = const $ (<$>) pure $ do
-            MP.char '\"'
-            chars <- MP.many (MP.try $ Lit . KitChar <$> escapedChar)
-            MP.char '\"'
-            return $ foldl Apply emptyTuple chars,
-        herbs = const MP.empty
-    }
+    salt = MP.empty,
+    sugar = const $ (<$>) pure $ do
+      MP.char '\"'
+      chars <- MP.many (MP.try $ Lit . KitChar <$> escapedChar)
+      MP.char '\"'
+      return $ foldl Apply emptyTuple chars,
+    herbs = const MP.empty
+  }
 
 tupleLiteral :: (Ord e, Monad m) => Seasoning m e
 tupleLiteral = Seasoning {
-        salt = MP.empty,
-        sugar = \exp ->
-            MP.try ((<$>) pure $ emptyTuple <$ MP.char '(' <* MP.space <* MP.char ')') <|>
-            MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp <* MP.space <* MP.char ',' <* MP.space <* MP.char ')')) <|>
-            (do
-                MP.char '('
-                first <- MP.space *> exp <* MP.space
-                rest <- (<$>) sequenceA $ MP.many $ MP.try $ MP.char ',' *> MP.space *> exp <* MP.space
-                MP.char ')'
-                return $ foldl Apply emptyTuple <$> ((:) <$> first <*> rest)
-            ),
-        herbs = const MP.empty
-    }
+    salt = MP.empty,
+    sugar = \exp ->
+      MP.try ((<$>) pure $ emptyTuple <$ MP.char '(' <* MP.space <* MP.char ')') <|>
+      MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp <* MP.space <* MP.char ',' <* MP.space <* MP.char ')')) <|>
+      (do
+        MP.char '('
+        first <- MP.space *> exp <* MP.space
+        rest <- (<$>) sequenceA $ MP.many $ MP.try $ MP.char ',' *> MP.space *> exp <* MP.space
+        MP.char ')'
+        return $ foldl Apply emptyTuple <$> ((:) <$> first <*> rest)
+      ),
+    herbs = const MP.empty
+  }
+
+offlineExport :: (Ord e, KitParseMonad m) => Seasoning m e
+offlineExport = Seasoning {
+    salt = MP.empty,
+    sugar = const MP.empty,
+    herbs = const $
+      MP.string "export" *> MP.space1 *>
+      ((\name -> liftExportNames $ ExportNames [name] ()) <$> (MP.try textName <|> symbolicName))
+      <* MP.space <* MP.char ';'
+  }
 
 typeDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
 typeDefinition = Seasoning {
-        salt = MP.empty,
-        sugar = const MP.empty,
-        herbs = \exp -> do
-            MP.string "::"
-            typename <- textName
-            MP.space1
-            argname <-
-                MP.try textName <|>
-                MP.try symbolicName <|>
-                ("" <$ MP.char '_') -- discard arg
-            MP.space1
-            selfalias <-
-                MP.try ("self" <$ MP.string "=>") <|>
-                MP.try ("" <$ MP.string "[]=>") <|> -- un-usable name, syntax for pure functions
-                (MP.char '[' *> (MP.try textName <|> symbolicName) <* MP.string "]=>")
-            MP.space1
-            body <- exp
-            MP.space1
-            MP.char ';'
-            return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename selfalias argname <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure ()
-    }
+    salt = MP.empty,
+    sugar = const MP.empty,
+    herbs = \exp -> mayexport $ do
+      MP.string "::"
+      typename <- textName
+      MP.space1
+      argname <-
+        MP.try textName <|>
+        MP.try symbolicName <|>
+        ("" <$ MP.char '_') -- discard arg
+      MP.space1
+      selfalias <-
+        MP.try ("self" <$ MP.string "=>") <|>
+        (MP.char '[' *> (MP.try textName <|> symbolicName) <* MP.string "]=>")
+      MP.space1
+      body <- exp
+      MP.space
+      MP.char ';'
+      return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached
+        <$> sequenceA [ClosureTypeDef typename selfalias argname
+        <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure typename
+  }
 
         
