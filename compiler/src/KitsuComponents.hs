@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
 module KitsuComponents (
+  textName,
+  symbolicName,
   KitParseMonad (..),
   TypeDefAttached (..),
   parsePrimitive,
@@ -9,7 +10,7 @@ module KitsuComponents (
 
 import KitsuByteCode
 import KitsuPreludeConnection (inline)
-import KitsuSeasoning (Seasoning, salt, sugar, herbs)
+import KitsuSeasoning (Seasoning(..), KitParseMonad(..), TypeDefAttached(..))
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
@@ -17,32 +18,6 @@ import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Functor.Compose (Compose (Compose), getCompose)
-
-data TypeDefAttached a = TypeDefAttached [ClosureTypeDef] [ClosureTypeHash] a deriving (Show)
-
--- trivial derivations of functor typeclasses
-instance Functor TypeDefAttached where
-  fmap f (TypeDefAttached xs hs a) = TypeDefAttached xs hs (f a)
-instance Applicative TypeDefAttached where
-  pure = TypeDefAttached [] mempty
-  TypeDefAttached xs hs f <*> TypeDefAttached ys is a = TypeDefAttached (xs ++ ys) (hs ++ is) (f a)
-instance Monad TypeDefAttached where
-  m >>= f = (\case TypeDefAttached ys is (TypeDefAttached xs hs a) -> TypeDefAttached (xs ++ ys) (hs ++ is) a) (f <$> m)
-instance Semigroup a => Semigroup (TypeDefAttached a) where
-  ma <> mb = (<>) <$> ma <*> mb
-instance Foldable TypeDefAttached where
-  foldMap f (TypeDefAttached _ _ a) = f a
-instance Traversable TypeDefAttached where
-  traverse f (TypeDefAttached xs hs a) = TypeDefAttached xs hs <$> f a
-
--- custom side effect interface
-class Monad m => KitParseMonad m where
-  liftTypeDefAttached :: TypeDefAttached a -> m a
-  asTypeDefAttached :: m a -> TypeDefAttached a
-
-instance KitParseMonad TypeDefAttached where
-  liftTypeDefAttached = id
-  asTypeDefAttached = id
 
 -- === SIMPLE PARSERS ===
 
@@ -55,6 +30,7 @@ textName = MP.label "name" $ (:) <$> startChar <*> MP.many restChar
 symbolicName :: (Ord e) => MP.Parsec e String String
 symbolicName = MP.label "symbol" $
   MP.notFollowedBy (MP.string "=>") *>
+  MP.notFollowedBy (MP.string "::") *>
   MP.some (MP.oneOf "$%^&*-+=<>[]|?!:/~")
 
 -- === SIDE-EFFECT INDUCING PARSERS ===

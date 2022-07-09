@@ -1,8 +1,9 @@
 module KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral) where
 
 import KitsuByteCode
-import KitsuSeasoning (Seasoning(..))
+import KitsuSeasoning (Seasoning(..), KitParseMonad(..), TypeDefAttached(..), AfterImportAction(..))
 import KitsuPreludeConnection (emptyTuple)
+import KitsuComponents (textName, symbolicName)
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
@@ -107,6 +108,30 @@ tupleLiteral = Seasoning {
                 return $ foldl Apply emptyTuple <$> ((:) <$> first <*> rest)
             ),
         herbs = const MP.empty
+    }
+
+typeDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
+typeDefinition = Seasoning {
+        salt = MP.empty,
+        sugar = const MP.empty,
+        herbs = \exp -> do
+            MP.string "::"
+            typename <- textName
+            MP.space1
+            argname <-
+                MP.try textName <|>
+                MP.try symbolicName <|>
+                ("" <$ MP.char '_') -- discard arg
+            MP.space1
+            selfalias <-
+                MP.try ("self" <$ MP.string "=>") <|>
+                MP.try ("" <$ MP.string "[]=>") <|> -- un-usable name, syntax for pure functions
+                (MP.char '[' *> (MP.try textName <|> symbolicName) <* MP.string "]=>")
+            MP.space1
+            body <- exp
+            MP.space1
+            MP.char ';'
+            return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename selfalias argname <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure ()
     }
 
         

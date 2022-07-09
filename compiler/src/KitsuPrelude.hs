@@ -1,7 +1,7 @@
-module KitsuPrelude where
+module KitsuPrelude (preludeDef) where
 
 import KitsuByteCode
-import KitsuComponents (KitParseMonad, liftTypeDefAttached, TypeDefAttached (TypeDefAttached))
+import KitsuSeasoning (KitParseMonad(..), TypeDefAttached(..))
 
 tupleDef :: (KitParseMonad m) => m ()
 tupleDef = liftTypeDefAttached $
@@ -19,3 +19,10 @@ tupleDef = liftTypeDefAttached $
     ClosureTypeHash {closureHash = ("Tuple", 0)}
     ]
     ()
+
+
+
+preludeDef :: (KitParseMonad m) => m ()
+preludeDef = do
+    tupleDef
+    return ()

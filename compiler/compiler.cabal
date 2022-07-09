@@ -22,8 +22,10 @@ source-repository head
 
 library
   exposed-modules:
+      AbstractInstances
       KitsuByteCode
       KitsuComponents
+      KitsuParse
       KitsuPrelude
       KitsuPreludeConnection
       KitsuSeasoning

@@ -43,11 +43,12 @@ data Expression
 data KitsuGlobal = KitsuGlobal {
     kitsuDependencies :: [String], -- list of modules that this file depends on
     kitsuTypeDefs :: [ClosureTypeDef],
-    kitsuVarDefs :: [(String, Expression)]
+    kitsuVarDefs :: [(String, Expression)],
+    kitsuAfterDefs :: [Expression] -- list of expressions to run after all imports have been resolved
 } deriving (Show)
 
 -- Form of a module
-data Module = Module
+data KitsuModule = KitsuModule
     KitsuGlobal
     [ClosureTypeHash]
     [String] -- exported names
@@ -61,7 +62,7 @@ data ProcessCallDef = ProcessCallDef {
 } deriving (Show)
 
 -- Form of a program, variables 'cmdargs' and 'process' are automatically added to the environment
-data Program = Program 
+data KitsuProgram = KitsuProgram 
     KitsuGlobal
     [ClosureTypeHash]
     [ProcessCallDef] -- process interface
