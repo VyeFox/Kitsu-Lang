@@ -54,7 +54,7 @@ parseClosure seasoning stop = MP.label "closure" $
           kvs <- sequenceA wkvs
           kv <- wkv
           return $ kvs ++ [kv]
-        ) <$> (MP.char '{' *> MP.space *> MP.manyTill_ (keyvalue (MP.space *> MP.char ',' *> MP.space)) (keyvalue $ MP.space <* MP.char '}')))
+        ) <$> (MP.char '{' *> MP.space *> MP.manyTill_ (keyvalue (MP.try $ MP.space *> MP.char ',' *> MP.space)) (MP.try $ keyvalue $ MP.try $ MP.space <* MP.char '}')))
       function tname_space = MP.label "function-def" $ do
         typename <- tname_space
         argname <-
@@ -90,7 +90,7 @@ parseExpression seasoning stop =
         MP.string "${" <* MP.space
         defs <- (<$>) sequenceA $ MP.manyTill (getCompose $ (,)
           <$> Compose ((<$>) pure $ MP.try textName <|> symbolicName)
-          <*> Compose (MP.space1 *> MP.char '=' *> MP.space1 *> this (MP.space <* MP.char ';') <* MP.space)
+          <*> Compose (MP.space1 *> MP.char '=' *> MP.space1 *> this (MP.try $ MP.space <* MP.char ';') <* MP.space)
           ) (MP.char '}')
         val <- MP.space *> this stop'
         return $ CoDef <$> defs <*> val
@@ -100,7 +100,7 @@ parseExpression seasoning stop =
       regularFunc =
         MP.try ((<$>) pure $ Name <$> textName) <|>
         MP.try (MP.char '(' *> (<$>) pure (Name <$> symbolicName) <* MP.char ')') <|>
-        MP.char '(' *> MP.space *> this (MP.space <* MP.char ')')
+        MP.char '(' *> MP.space *> this (MP.try $ MP.space <* MP.char ')')
       propdrill stop' = do
         obj <- regularFunc
         props <- pure <$> MP.manyTill (MP.space *> MP.char '.' *> MP.space *> textName) stop'
@@ -108,21 +108,22 @@ parseExpression seasoning stop =
       inlineFunc = MP.label "operator" $
         MP.try ((<$>) pure $ Name <$> symbolicName) <|>
         MP.try (MP.char '`' *> (<$>) pure (Name <$> textName) <* MP.char '`') <|>
-        MP.string "`(" *> MP.space *> this (MP.space <* MP.string ")`")
+        MP.string "`(" *> MP.space *> this (MP.try $ MP.space <* MP.string ")`")
       component stop' = MP.label "value" $
         MP.try (sugar seasoning this stop') <|>
+        MP.try (codef stop') <|>
         MP.try (parseClosure seasoning stop') <|>
         MP.try (value stop') <|>
         propdrill stop'
       currychain stop' = do
-        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.manyTill_ (component MP.space1) (component stop')
+        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.manyTill_ (component $ MP.try MP.space1) (MP.try $ component stop')
         let first = head <$> terms
         let rest = tail <$> terms
         return $ foldl Apply <$> first <*> rest
       operatorfold stop' = do
         opfold <- (\(ees, e) -> (sequenceA ((\(x, y) -> (,) <$> x <*> y) <$> ees), e)) <$> MP.manyTill_ ((,)
-          <$> currychain (MP.lookAhead $ MP.space1 <* (MP.try (() <$ MP.char '`') <|> (() <$ symbolicName)))
-          <*> (MP.space1 *> inlineFunc <* MP.space1)) (currychain stop')
+          <$> currychain (MP.try $ MP.lookAhead $ MP.space1 <* (MP.try (() <$ MP.char '`') <|> (() <$ symbolicName)))
+          <*> (MP.space1 *> inlineFunc <* MP.space1)) (MP.try $ currychain stop')
         --  * TL;DR: by folding a function the natural order of the fold can be reversed
         {-
           The composition of opfold into a single expression can be thought of as an action upon the last element (call it `x`);
@@ -133,5 +134,5 @@ parseExpression seasoning stop =
           ...to form the expression with the correct fold order.
         -}
         let (yops, x) = opfold
-        return $ (foldl (\format (y, op) x' -> inline op y x') id <$> yops) <*> x
+        return $ (foldl (\format (y, op) x' -> inline op (format y) x') id <$> yops) <*> x
 

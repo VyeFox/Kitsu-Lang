@@ -102,7 +102,7 @@ stringLiteral = Seasoning {
     salt = MP.empty,
     sugar = const $ \stop -> (<$>) pure $ do
       MP.char '\"'
-      chars <- MP.manyTill (MP.try $ Lit . KitChar <$> escapedChar) (MP.char '\"')
+      chars <- MP.manyTill (Lit . KitChar <$> escapedChar) (MP.char '\"')
       stop
       return $ foldl Apply emptyTuple chars,
     herbs = const MP.empty
@@ -114,10 +114,10 @@ tupleLiteral = Seasoning {
     salt = MP.empty,
     sugar = \exp stop ->
       MP.try ((<$>) pure $ emptyTuple <$ MP.char '(' <* MP.space <* MP.char ')' <* stop) <|>
-      MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp (MP.space <* MP.char ',') <* MP.space <* MP.char ')' <* stop)) <|>
+      MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp (MP.try $ MP.space <* MP.char ',') <* MP.space <* MP.char ')' <* stop)) <|>
       (do
         MP.char '('
-        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.manyTill_ (MP.space *> exp (MP.space <* MP.char ',' <* MP.space)) (exp (MP.space <* MP.char ')'))
+        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.manyTill_ (MP.space *> exp (MP.try $ MP.space <* MP.char ',' <* MP.space)) (MP.try $ exp (MP.try $ MP.space <* MP.char ')'))
         stop
         return $ foldl Apply emptyTuple <$> terms
       ),
