@@ -8,10 +8,10 @@ import System.IO (readFile)
 import KitsuByteCode (Expression)
 import KitsuComponents (parseExpression)
 import KitsuSeasoning (Seasoning, ParseKernel)
-import KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral, offlineExport, typeDefinition)
+import KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral, offlineExport)
 
 main :: IO ()
 main = do
     exp <- getLine
-    MP.parseTest(parseExpression (tupleLiteral <> stringLiteral <> simpleLiterals) <* MP.eof :: MP.Parsec Void String (ParseKernel Expression)) exp
+    MP.parseTest(parseExpression (tupleLiteral <> stringLiteral <> simpleLiterals) MP.eof :: MP.Parsec Void String (ParseKernel Expression)) exp
     

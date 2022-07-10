@@ -35,24 +35,26 @@ symbolicName = MP.label "symbol" $
 
 -- === SIDE-EFFECT INDUCING PARSERS ===
 
-parsePrimitive :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m Primitive)
-parsePrimitive seasoning = MP.label "primitive" $
-  MP.try ((<$>) KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression seasoning)) <|>
-  (<$>) KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression seasoning)
+parsePrimitive :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Primitive)
+parsePrimitive seasoning stop = MP.label "primitive" $
+  MP.try ((<$>) KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression seasoning stop)) <|>
+  (<$>) KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression seasoning stop)
 
--- TODO: ...Till refactor aware.
-parseClosure :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m Expression)
-parseClosure seasoning = MP.label "closure" $
-  MP.try constructed <|>
+parseClosure :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Expression)
+parseClosure seasoning stop = MP.label "closure" $
+  MP.try (constructed <* stop) <|>
   MP.try initialTypeDef <|>
   MP.try lambda <|>
-  jsobj
+  (jsobj <* stop)
     where
-      keyvalue = MP.label "key-value-pair" $ getCompose $ (,) <$> Compose ((<$>) pure $ textName <* MP.space) <*> Compose (MP.char ':' *> MP.space *> parseExpression seasoning)
-      objectInner = getCompose $ (:) <$> Compose keyvalue <*> Compose (sequenceA <$> MP.many (MP.try $ MP.space *> MP.char ',' *> MP.space *> keyvalue))
-      objectBody = MP.label "closure-body" $
-        MP.try (MP.char '{' *> MP.space *> objectInner <* MP.space <* MP.char '}') <|>
-        pure [] <$ MP.char '{' <* MP.space <* MP.char '}'
+      keyvalue stop' = MP.label "key-value-pair" $ getCompose $ (,)
+        <$> Compose ((<$>) pure $ textName <* MP.space)
+        <*> Compose (MP.char ':' *> MP.space *> parseExpression seasoning stop')
+      objectBody = MP.try (pure [] <$ MP.char '{' <* MP.space <* MP.char '}') <|> ((\(wkvs, wkv) -> do
+          kvs <- sequenceA wkvs
+          kv <- wkv
+          return $ kvs ++ [kv]
+        ) <$> (MP.char '{' *> MP.space *> MP.manyTill_ (keyvalue (MP.space *> MP.char ',' *> MP.space)) (keyvalue $ MP.space <* MP.char '}')))
       function tname_space = MP.label "function-def" $ do
         typename <- tname_space
         argname <-
@@ -64,8 +66,8 @@ parseClosure seasoning = MP.label "closure" $
           MP.try ("self" <$ MP.string "=>") <|>
           (MP.char '[' *> (MP.try textName <|> symbolicName) <* MP.string "]=>")
         MP.space1
-        body <- parseExpression seasoning
-        return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename selfalias argname <$> body] <*> pure [ClosureTypeHash (typename, 0)] <*> pure typename
+        funcBody <- parseExpression seasoning stop
+        return $ join $ (<$>) liftTypeDefAttached $ TypeDefAttached <$> sequenceA [ClosureTypeDef typename selfalias argname <$> funcBody] <*> pure [ClosureTypeHash (typename, 0)] <*> pure typename
       constructed = getCompose $ Closure <$> Compose (pure <$> textName) <*> Compose objectBody
       initialTypeDef = do
         objbod <- objectBody
@@ -78,46 +80,58 @@ parseClosure seasoning = MP.label "closure" $
       jsobj = (<$>) (Closure "Object") <$> objectBody
 
 -- TODO: ...Till refector target.
-parseExpression :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m Expression)
-parseExpression seasoning =
-  MP.try codef <|>
-  operatorfold
+parseExpression :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Expression)
+parseExpression seasoning stop =
+  MP.try (codef stop) <|>
+  operatorfold stop
     where
       this = parseExpression seasoning -- expression parser recursively calls itself
-      codef = MP.label "${...}" $ do
+      codef stop' = MP.label "${...}" $ do
         MP.string "${" <* MP.space
-        defs <- (<$>) sequenceA $ MP.many $ MP.try $ MP.label "declaration" $ getCompose $ (,)
+        defs <- (<$>) sequenceA $ MP.manyTill (getCompose $ (,)
           <$> Compose ((<$>) pure $ MP.try textName <|> symbolicName)
-          <*> Compose (MP.space1 *> MP.char '=' *> MP.space1 *> this <* MP.space <* MP.char ';' <* MP.space)
-        MP.char '}'
-        val <- MP.space *> this
+          <*> Compose (MP.space1 *> MP.char '=' *> MP.space1 *> this (MP.space <* MP.char ';') <* MP.space)
+          ) (MP.char '}')
+        val <- MP.space *> this stop'
         return $ CoDef <$> defs <*> val
-      value =
-        MP.try ((<$>) Lit <$> salt seasoning) <|>
-        MP.try ((<$>) Prim <$> parsePrimitive seasoning)
+      value stop' =
+        MP.try ((<$>) Lit <$> salt seasoning <* stop') <|>
+        MP.try ((<$>) Prim <$> parsePrimitive seasoning stop')
       regularFunc =
         MP.try ((<$>) pure $ Name <$> textName) <|>
         MP.try (MP.char '(' *> (<$>) pure (Name <$> symbolicName) <* MP.char ')') <|>
-        MP.char '(' *> MP.space *> this <* MP.space <* MP.char ')'
-      propdrill = do
+        MP.char '(' *> MP.space *> this (MP.space <* MP.char ')')
+      propdrill stop' = do
         obj <- regularFunc
-        props <- pure <$> MP.many (MP.try $ MP.space *> MP.char '.' *> MP.space *> textName)
+        props <- pure <$> MP.manyTill (MP.space *> MP.char '.' *> MP.space *> textName) stop'
         return $ foldl GetProp <$> obj <*> props
       inlineFunc = MP.label "operator" $
         MP.try ((<$>) pure $ Name <$> symbolicName) <|>
         MP.try (MP.char '`' *> (<$>) pure (Name <$> textName) <* MP.char '`') <|>
-        MP.string "`(" *> MP.space *> this <* MP.space <* MP.string ")`"
-      component = MP.label "value" $
-        MP.try (sugar seasoning this) <|>
-        MP.try (parseClosure seasoning) <|>
-        MP.try value <|>
-        propdrill
-      currychain = do
-        first <- component
-        rest <- sequenceA <$> MP.many (MP.try $ MP.space1 *> component)
+        MP.string "`(" *> MP.space *> this (MP.space <* MP.string ")`")
+      component stop' = MP.label "value" $
+        MP.try (sugar seasoning this stop') <|>
+        MP.try (parseClosure seasoning stop') <|>
+        MP.try (value stop') <|>
+        propdrill stop'
+      currychain stop' = do
+        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.manyTill_ (component MP.space1) (component stop')
+        let first = head <$> terms
+        let rest = tail <$> terms
         return $ foldl Apply <$> first <*> rest
-      operatorfold = do
-        initialchain <- currychain
-        opfolds <- sequenceA <$> MP.many (MP.try $ getCompose $ (\operator rhs lhs -> inline operator lhs rhs) <$> Compose (MP.space1 *> inlineFunc <* MP.space1) <*> Compose currychain)
-        return $ foldl (\lhs op_rhs -> op_rhs lhs) <$> initialchain <*> opfolds
+      operatorfold stop' = do
+        opfold <- (\(ees, e) -> (sequenceA ((\(x, y) -> (,) <$> x <*> y) <$> ees), e)) <$> MP.manyTill_ ((,)
+          <$> currychain (MP.lookAhead $ MP.space1 <* (MP.try (() <$ MP.char '`') <|> (() <$ symbolicName)))
+          <*> (MP.space1 *> inlineFunc <* MP.space1)) (currychain stop')
+        --  * TL;DR: by folding a function the natural order of the fold can be reversed
+        {-
+          The composition of opfold into a single expression can be thought of as an action upon the last element (call it `x`);
+          in the case where there are no operators, this action on `x` is `id`.
+          in the case where there is an operator `(y, op)` this action is `(id y) 'op' x`
+          the already existing action is applied to `y` to ensure the fold direction is: `(x <> y) <> z`
+          the resulting action of folding this composition through opfold is precisely the action needed on x
+          ...to form the expression with the correct fold order.
+        -}
+        let (yops, x) = opfold
+        return $ (foldl (\format (y, op) x' -> inline op y x') id <$> yops) <*> x
 

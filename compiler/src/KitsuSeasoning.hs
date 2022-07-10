@@ -112,20 +112,20 @@ instance (Show a) => Show (ParseKernel a) where
 -- TODO: ...Till refactor aware.
 data Seasoning m e = Seasoning {
         salt :: MP.Parsec e String (m Literal), -- how to parse literals
-        sugar :: MP.Parsec e String (m Expression) -> MP.Parsec e String (m Expression), -- inner expression component
-        herbs :: MP.Parsec e String (m Expression) -> MP.Parsec e String (m ()) -- global line
+        sugar :: (MP.Parsec e String () -> MP.Parsec e String (m Expression)) -> (MP.Parsec e String () -> MP.Parsec e String (m Expression)), -- inner expression component
+        herbs :: (MP.Parsec e String () -> MP.Parsec e String (m Expression)) -> MP.Parsec e String (m ()) -- global line
     }
 
 instance (Ord e) => Semigroup (Seasoning m e) where
     a <> b = Seasoning {
         salt = MP.try (salt a) <|> salt b,
-        sugar = \exp -> MP.try (sugar a exp) <|> sugar b exp,
+        sugar = \exp stop -> MP.try (sugar a exp stop) <|> sugar b exp stop,
         herbs = \exp -> MP.try (herbs a exp) <|> herbs b exp
     }
 
 instance (Ord e) => Monoid (Seasoning m e) where
     mempty = Seasoning {
         salt = MP.empty,
-        sugar = const MP.empty,
+        sugar = const $ const MP.empty,
         herbs = const MP.empty
     }

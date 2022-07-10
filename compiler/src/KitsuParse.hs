@@ -16,7 +16,6 @@ import Data.Functor.Compose (Compose (Compose), getCompose)
 -- TODO: ...Till refacor aware.
 parseModule :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String KitsuModule
 parseModule seasoning = do
-    imps <- imports
     names <- deflist
     MP.space <* MP.eof
     let asTDA = asTypeDefAttached names
@@ -24,7 +23,7 @@ parseModule seasoning = do
     let asExp = asExportNames names
     return $ KitsuModule
         (KitsuGlobal {
-            kitsuDependencies = imps,
+            kitsuDependencies = [],
             kitsuTypeDefs = (\case TypeDefAttached ds hs a -> ds) asTDA,
             kitsuVarDefs = (\case TypeDefAttached ds hs a -> a) asTDA,
             kitsuAfterDefs = (\case AfterImportAction es a -> es) asAIA
@@ -32,7 +31,6 @@ parseModule seasoning = do
         ((\case TypeDefAttached ds hs a -> hs) asTDA)
         ((\case ExportNames ns a -> ns) asExp)
         where
-            imports = MP.many $ MP.try $ MP.space *> MP.string "import" *> MP.space1 *> MP.string "***" <* MP.space <* MP.char ';'
             definition = do
                 action <-
                     MP.try ((\str -> liftExportNames (ExportNames [str] str)) <$ MP.string "export" <* MP.space1) <|>
@@ -41,11 +39,9 @@ parseModule seasoning = do
                 MP.space1
                 MP.char '='
                 MP.space1
-                def <- parseExpression seasoning
-                MP.space
-                MP.char ';'
+                def <- parseExpression seasoning (MP.space <* MP.char ';')
                 return $ (,) <$> action name <*> def
             defmor = getCompose $ (:) <$> Compose definition
             idmor = getCompose $ id <$ Compose (herbs seasoning (parseExpression seasoning))
-            deflist = getCompose $ foldl (\ds f -> f ds) [] <$> Compose (sequenceA <$> MP.many (MP.try $ MP.space *> (MP.try idmor <|> defmor)))
+            deflist = getCompose $ foldl (\ds f -> f ds) [] <$> Compose (sequenceA <$> MP.manyTill (MP.space *> (MP.try idmor <|> defmor)) (MP.space *> MP.eof))
 
