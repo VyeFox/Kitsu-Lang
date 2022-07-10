@@ -1,13 +1,12 @@
 module KitsuSpiceRack (
-  mayexport,
+  escapedChar,
   simpleLiterals,
   stringLiteral,
-  tupleLiteral,
-  offlineExport
+  tupleLiteral
 ) where
 
 import KitsuByteCode
-import KitsuSeasoning (Seasoning(..), KitParseMonad(..), TypeDefAttached(..), AfterImportAction(..), ExportNames(..))
+import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
 import KitsuPreludeConnection (emptyTuple)
 import KitsuComponents (textName, symbolicName)
 
@@ -82,37 +81,31 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
       parseByte = KitByte <$> ((\x' x -> 16*x' + x) <$> (MP.string "0x" *> hex) <*> hex)
       parseChar = KitChar <$> (MP.char '\'' *> escapedChar <* MP.char '\'')
 
-mayexport :: (Ord e, KitParseMonad m) => MP.Parsec e String (m String) -> MP.Parsec e String (m ())
-mayexport s = do
-  action <-
-    MP.try ((\str -> liftExportNames (ExportNames [str] ())) <$ MP.string "export" <* MP.space1) <|>
-    ((\str -> pure ()) <$ MP.notFollowedBy MP.empty)
-  rest <- s
-  return $ rest >>= action
-
 simpleLiterals :: (Ord e, Monad m) => Seasoning m e
 simpleLiterals = Seasoning {
+    reservations = (<$) () $ MP.try (MP.string "true") <|> MP.string "false",
     salt = parseLiteral,
-    sugar = const $ const MP.empty,
-    herbs = const MP.empty
+    sugar = const $ const $ const MP.empty,
+    herbs = const $ const MP.empty
   }
 
 stringLiteral :: (Ord e, Monad m) => Seasoning m e
 stringLiteral = Seasoning {
+    reservations = MP.empty,
     salt = MP.empty,
-    sugar = const $ \stop -> (<$>) pure $ do
+    sugar = const $ const $ \stop -> (<$>) pure $ do
       MP.char '\"'
       chars <- MP.manyTill (Lit . KitChar <$> escapedChar) (MP.char '\"')
       stop
       return $ foldl Apply emptyTuple chars,
-    herbs = const MP.empty
+    herbs = const $ const MP.empty
   }
 
--- TODO: ...Till refactor aware.
 tupleLiteral :: (Ord e, Monad m) => Seasoning m e
 tupleLiteral = Seasoning {
+    reservations = MP.empty,
     salt = MP.empty,
-    sugar = \exp stop ->
+    sugar = \res exp stop ->
       MP.try ((<$>) pure $ emptyTuple <$ MP.char '(' <* MP.space <* MP.char ')' <* stop) <|>
       MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp (MP.try $ MP.space <* MP.char ',') <* MP.space <* MP.char ')' <* stop)) <|>
       (do
@@ -121,17 +114,17 @@ tupleLiteral = Seasoning {
         stop
         return $ foldl Apply emptyTuple <$> terms
       ),
-    herbs = const MP.empty
+    herbs = const $ const MP.empty
   }
 
-offlineExport :: (Ord e, KitParseMonad m) => Seasoning m e
-offlineExport = Seasoning {
+valueDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
+valueDefinition = Seasoning {
+    reservations = MP.empty,
     salt = MP.empty,
-    sugar = const $ const MP.empty,
-    herbs = const $
-      MP.string "export" *> MP.space1 *>
-      ((\name -> liftExportNames $ ExportNames [name] ()) <$> (MP.try textName <|> symbolicName))
-      <* MP.space <* MP.char ';'
+    sugar = const $ const $ const MP.empty,
+    herbs = \res exp -> do
+      
+      return $ pure ()
   }
 
         

@@ -1,10 +1,10 @@
-{-# LANGUAGE LambdaCase #-}
 module KitsuParse (parseModule) where
 
 import KitsuByteCode
 import KitsuComponents (parseExpression, textName, symbolicName)
 import KitsuPrelude (preludeDef)
-import KitsuSeasoning (Seasoning(..), KitParseMonad(..), TypeDefAttached(..), ExportNames(..), AfterImportAction(..))
+import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
+import KitsuSpiceRack (escapedChar)
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
@@ -13,35 +13,17 @@ import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Functor.Compose (Compose (Compose), getCompose)
 
--- TODO: ...Till refacor aware.
 parseModule :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String KitsuModule
 parseModule seasoning = do
-    names <- deflist
-    MP.space <* MP.eof
-    let asTDA = asTypeDefAttached names
-    let asAIA = asAfterImportAction names
-    let asExp = asExportNames names
-    return $ KitsuModule
-        (KitsuGlobal {
-            kitsuDependencies = [],
-            kitsuTypeDefs = (\case TypeDefAttached ds hs a -> ds) asTDA,
-            kitsuVarDefs = (\case TypeDefAttached ds hs a -> a) asTDA,
-            kitsuAfterDefs = (\case AfterImportAction es a -> es) asAIA
-        })
-        ((\case TypeDefAttached ds hs a -> hs) asTDA)
-        ((\case ExportNames ns a -> ns) asExp)
-        where
-            definition = do
-                action <-
-                    MP.try ((\str -> liftExportNames (ExportNames [str] str)) <$ MP.string "export" <* MP.space1) <|>
-                    (pure <$ MP.notFollowedBy MP.empty)
-                name <- MP.try textName <|> symbolicName
-                MP.space1
-                MP.char '='
-                MP.space1
-                def <- parseExpression seasoning (MP.space <* MP.char ';')
-                return $ (,) <$> action name <*> def
-            defmor = getCompose $ (:) <$> Compose definition
-            idmor = getCompose $ id <$ Compose (herbs seasoning (parseExpression seasoning))
-            deflist = getCompose $ foldl (\ds f -> f ds) [] <$> Compose (sequenceA <$> MP.manyTill (MP.space *> (MP.try idmor <|> defmor)) (MP.space *> MP.eof))
+    MP.space *> MP.string "module" *> MP.space *> MP.char '{'
+    imps <- MP.manyTill (MP.space *> imp) (MP.try $ MP.space *> MP.char '}')
+    MP.space *> MP.char '('
+    exps <-
+        MP.try ([] <$ MP.space <* MP.char ')') <|>
+        ((\(xs, x) -> xs ++ [x]) <$> MP.manyTill_ (MP.space *> (MP.try textName <|> symbolicName) <* MP.space <* MP.char ',')
+        (MP.try $ MP.space *> (MP.try textName <|> symbolicName) <* MP.space <* MP.char ')'))
+    global <- MP.manyTill (MP.space *> herbs seasoning (reservations seasoning) (parseExpression seasoning)) (MP.try $ MP.space *> MP.eof)
+    return $ toModule $ foldl (<*) (pure (imps, exps)) global
+    where
+        imp = MP.char '\"' *> MP.manyTill escapedChar (MP.char '\"')
 

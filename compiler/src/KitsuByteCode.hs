@@ -16,19 +16,6 @@ data Primitive
     | KitAtomic Expression -- initial value of mutable variable
     deriving (Show)
 
--- Defines the behabiour of a function call
-data ClosureTypeDef = ClosureTypeDef {
-    closureName :: String,
-    closureSelfAlias :: String,
-    closureArgName :: String,
-    closureBody :: Expression
-} deriving (Show)
-
--- Stores the hash of a closure definition body for checking equality across different processes
-newtype ClosureTypeHash = ClosureTypeHash {
-    closureHash :: (String, Integer)
-} deriving (Show)
-
 -- General form of an expression
 data Expression
     = Name String -- local variable
@@ -37,41 +24,26 @@ data Expression
     | Apply Expression Expression -- function application
     | Closure String [(String, Expression)] -- closure
     | GetProp Expression String -- get property of a closure
-    | CoDef [(String, Expression)] Expression -- define multiple values in paralelle for self / sister reference
+    | CoDef [(Maybe String, Expression)] Expression -- simple procedural logic
     deriving (Show)
 
-data KitsuGlobal = KitsuGlobal {
-    kitsuDependencies :: [String], -- list of modules that this file depends on
-    kitsuTypeDefs :: [ClosureTypeDef],
-    kitsuVarDefs :: [(String, Expression)],
-    kitsuAfterDefs :: [Expression] -- list of expressions to run after all imports have been resolved
+-- Defines the behabiour of a function call
+data ClosureTypeDef = ClosureTypeDef {
+    closureTypeName :: String,
+    closureTypeHash :: Integer,
+    closureTypeBody :: Maybe (String, Expression)
 } deriving (Show)
 
 -- Form of a module
 data KitsuModule = KitsuModule
-    KitsuGlobal
-    [ClosureTypeHash]
+    [ClosureTypeDef] -- type definitions
+    [(Maybe String, Expression)] -- assignments | actions
+    [String] -- imported modules
     [String] -- exported names
-    deriving (Show)
-
--- Form of process interface components
-data ProcessCallDef = ProcessCallDef {
-    procCallName :: String,
-    procCallArg :: String,
-    procCallExpr :: Expression
-} deriving (Show)
-
--- Form of a program, variables 'cmdargs' and 'process' are automatically added to the environment
-data KitsuProgram = KitsuProgram 
-    KitsuGlobal
-    [ClosureTypeHash]
-    [ProcessCallDef] -- process interface
     deriving (Show)
 
 -- Object notation
 data KitsuObjectNotation = KitsuObjectNotation
-    [ClosureTypeDef] -- only for lambdas
-    [ClosureTypeHash]
+    [ClosureTypeDef] -- only `Just` for lambdas, otherwise defer definition to reciever
     Expression -- object
-    [Expression] -- context
     deriving (Show)

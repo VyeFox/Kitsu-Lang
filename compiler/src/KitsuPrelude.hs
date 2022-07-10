@@ -1,28 +1,21 @@
 module KitsuPrelude (preludeDef) where
 
 import KitsuByteCode
-import KitsuSeasoning (KitParseMonad(..), TypeDefAttached(..))
+import KitsuSeasoning (KitParseMonad(..))
 
-tupleDef :: (KitParseMonad m) => m ()
-tupleDef = liftTypeDefAttached $
-    TypeDefAttached [
+tupleDef :: (KitParseMonad m) => m a -> m a
+tupleDef = defineType
     ClosureTypeDef {
-        closureName = "Tuple",
-        closureSelfAlias = "self",
-        closureArgName = "elem",
-        closureBody = Closure "Tuple" [
+        closureTypeName = "Tuple",
+        closureTypeHash = 0,
+        closureTypeBody = Just ("elem", Closure "Tuple" [
         ("rest", Name "self"),
         ("val", Name "elem")
-        ]
+        ])
     }
-    ] [
-    ClosureTypeHash {closureHash = ("Tuple", 0)}
-    ]
-    ()
 
 
 
-preludeDef :: (KitParseMonad m) => m ()
-preludeDef = do
+preludeDef :: (KitParseMonad m) => m a -> m a
+preludeDef =
     tupleDef
-    return ()
