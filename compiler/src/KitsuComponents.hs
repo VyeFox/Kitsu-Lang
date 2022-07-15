@@ -5,7 +5,10 @@ module KitsuComponents (
   parsePrimitive,
   parseClosure,
   parseArrowFunc,
-  parseExpression
+  parseExpression,
+  applySugars,
+  applyHerbs,
+  variableName
 ) where
 
 import KitsuByteCode
@@ -18,6 +21,17 @@ import Control.Monad (join, return)
 import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Functor.Compose (Compose (Compose), getCompose)
+
+-- === HELPERS FOR COOKS ===
+
+applySugars :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Expression)
+applySugars s = sugar s (reservations s) (parseExpression s)
+
+applyHerbs :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m ())
+applyHerbs s = herbs s (reservations s) (parseExpression s)
+
+variableName :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String String
+variableName s = MP.notFollowedBy (reservations s) *> (MP.try textName <|> symbolicName)
 
 -- === SIMPLE PARSERS ===
 
@@ -43,8 +57,8 @@ parsePrimitive seasoning stop = MP.label "primitive" $
   MP.try ((<$>) KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression seasoning stop)) <|>
   (<$>) KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression seasoning stop)
 
-parseArrowFunc :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (String -> m a -> m a)
-parseArrowFunc seasoning stop = MP.label "... => ..." $ do
+parseArrowFunc :: (Ord e, KitParseMonad m) => (Expression -> Expression) -> Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (String -> m a -> m a)
+parseArrowFunc f seasoning stop = MP.label "... => ..." $ do
   argname <-
     MP.notFollowedBy (reservations seasoning) *>
     (MP.try textName <|>
@@ -52,37 +66,55 @@ parseArrowFunc seasoning stop = MP.label "... => ..." $ do
   MP.space1 <* MP.string "=>" <* MP.space1
   expression <- parseExpression seasoning stop
   let compress = (\mf ma -> join $ mf <*> pure ma)
-  return $ \tname -> compress $ (\expression' -> defineType $ ClosureTypeDef tname 0 (Just (argname, expression'))) <$> expression
+  return $ \tname -> compress $ (\expression' -> defineType $ ClosureTypeDef tname 0 (Just (argname, expression'))) <$> (f <$> expression)
+
+parseObjectBody :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m [(String, Expression)])
+parseObjectBody seasoning = MP.try (pure [] <$ MP.char '{' <* MP.space <* MP.char '}') <|> ((\(wkvs, wkv) -> do
+    kvs <- sequenceA wkvs
+    kv <- wkv
+    return $ kvs ++ [kv]
+  ) <$> (MP.char '{' *> MP.space *> MP.manyTill_ (keyvalue (MP.try $ MP.space *> MP.char ',' *> MP.space)) (MP.try $ keyvalue $ MP.try $ MP.space <* MP.char '}')))
+    where
+      keyvalue stop' = MP.label "key-value-pair" $ getCompose $ (,)
+        <$> Compose ((<$>) pure $ MP.notFollowedBy (reservations seasoning) *> textName <* MP.space)
+        <*> Compose (MP.char ':' *> MP.space *> parseExpression seasoning stop')
+
+parseCapture :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String ([(String, Expression)], Expression -> Expression)
+parseCapture seasoning = do
+  MP.char '['
+  elems <- (\(xs, x) -> xs ++ [x]) <$> MP.manyTill_ (MP.space *> variableName seasoning <* MP.space <* MP.char ',') (MP.try $ MP.space *> variableName seasoning <* MP.space <* MP.char ']')
+  let indexes = (\x -> "x" ++ show x) <$> [0..(length elems - 1)]
+  let body = [(i, Name cap) | (i, cap) <- zip indexes elems]
+  let exprf = CoDef [(Just cap, GetProp (Name "self") i) | (cap, i) <- zip elems indexes]
+  return (body, exprf)
 
 parseClosure :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Expression)
 parseClosure seasoning stop = MP.label "closure" $
   MP.try (constructed <* stop) <|>
   MP.try (initialTypeDef stop) <|>
   MP.try (lambda stop) <|>
-  (jsobj <* stop)
+  MP.try (caplambda stop) <|>
+  jsobj stop
     where
-      keyvalue stop' = MP.label "key-value-pair" $ getCompose $ (,)
-        <$> Compose ((<$>) pure $ MP.notFollowedBy (reservations seasoning) *> textName <* MP.space)
-        <*> Compose (MP.char ':' *> MP.space *> parseExpression seasoning stop')
-      objectBody = MP.try (pure [] <$ MP.char '{' <* MP.space <* MP.char '}') <|> ((\(wkvs, wkv) -> do
-          kvs <- sequenceA wkvs
-          kv <- wkv
-          return $ kvs ++ [kv]
-        ) <$> (MP.char '{' *> MP.space *> MP.manyTill_ (keyvalue (MP.try $ MP.space *> MP.char ',' *> MP.space)) (MP.try $ keyvalue $ MP.try $ MP.space <* MP.char '}')))
-      constructed = getCompose $ Closure <$> Compose (pure <$> (MP.notFollowedBy (reservations seasoning) *> textName)) <*> Compose objectBody
+      constructed = getCompose $ Closure <$> Compose (pure <$> (MP.notFollowedBy (reservations seasoning) *> textName)) <*> Compose (parseObjectBody seasoning)
       initialTypeDef stop' = do
-        objbod <- objectBody
+        objbod <- parseObjectBody seasoning
         MP.string "::"
         typename <-
           MP.try (MP.notFollowedBy (reservations seasoning) *> textName <* MP.space1) <|>
           (MP.sourcePosPretty <$> MP.getSourcePos <* MP.space1)
-        func <- parseArrowFunc seasoning stop'
+        func <- parseArrowFunc id seasoning stop'
         return $ func typename $ Closure typename <$> objbod
       lambda stop' = do
         internalname <- MP.sourcePosPretty <$> MP.getSourcePos
-        func <- parseArrowFunc seasoning stop'
+        func <- parseArrowFunc id seasoning stop'
         return $ func internalname $ pure $ Closure internalname []
-      jsobj = (<$>) (Closure "Object") <$> objectBody
+      caplambda stop' = do
+        (objbod, exprf) <- parseCapture seasoning
+        typename <- MP.string "::" *> (MP.sourcePosPretty <$> MP.getSourcePos) <* MP.space1
+        func <- parseArrowFunc exprf seasoning stop'
+        return $ func typename $ pure (Closure typename objbod)
+      jsobj stop' = ((<$>) (Closure "Object") <$> parseObjectBody seasoning) <* stop'
 
 parseExpression :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Expression)
 parseExpression seasoning stop =
@@ -93,7 +125,7 @@ parseExpression seasoning stop =
       codef stop' = MP.label "${...}" $ do
         MP.string "${" <* MP.space
         defs <- (<$>) sequenceA $ MP.manyTill (getCompose $ (,)
-          <$> Compose (MP.try ((<$>) pure $ MP.optional $ (MP.notFollowedBy (reservations seasoning) *> (MP.try textName <|> symbolicName)) <* MP.space1 <* MP.char '=' <* MP.space1))
+          <$> Compose (MP.try ((<$>) pure $ MP.optional $ variableName seasoning <* MP.space1 <* MP.char '=' <* MP.space1))
           <*> Compose (this (MP.try $ MP.space <* MP.char ';') <* MP.space)
           ) (MP.char '}')
         val <- MP.space *> this stop'
@@ -114,7 +146,7 @@ parseExpression seasoning stop =
         MP.try (MP.char '`' *> (<$>) pure (Name <$> (MP.notFollowedBy (reservations seasoning) *> textName)) <* MP.char '`') <|>
         MP.string "`(" *> MP.space *> this (MP.try $ MP.space <* MP.string ")`")
       component stop' =
-        MP.try (sugar seasoning (reservations seasoning) this stop') <|>
+        MP.try (applySugars seasoning stop') <|>
         MP.try (codef stop') <|>
         MP.try (parseClosure seasoning stop') <|>
         MP.try (value stop') <|>

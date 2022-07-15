@@ -2,13 +2,14 @@ module KitsuSpiceRack (
   escapedChar,
   simpleLiterals,
   stringLiteral,
-  tupleLiteral
+  tupleLiteral,
+  valueDefinition
 ) where
 
 import KitsuByteCode
 import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
 import KitsuPreludeConnection (emptyTuple)
-import KitsuComponents (textName, symbolicName)
+import KitsuComponents (textName, symbolicName, parseExpression)
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
@@ -81,7 +82,7 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
       parseByte = KitByte <$> ((\x' x -> 16*x' + x) <$> (MP.string "0x" *> hex) <*> hex)
       parseChar = KitChar <$> (MP.char '\'' *> escapedChar <* MP.char '\'')
 
-simpleLiterals :: (Ord e, Monad m) => Seasoning m e
+simpleLiterals :: (Ord e, KitParseMonad m) => Seasoning m e
 simpleLiterals = Seasoning {
     reservations = (<$) () $ MP.try (MP.string "true") <|> MP.string "false",
     salt = parseLiteral,
@@ -89,7 +90,7 @@ simpleLiterals = Seasoning {
     herbs = const $ const MP.empty
   }
 
-stringLiteral :: (Ord e, Monad m) => Seasoning m e
+stringLiteral :: (Ord e, KitParseMonad m) => Seasoning m e
 stringLiteral = Seasoning {
     reservations = MP.empty,
     salt = MP.empty,
@@ -101,7 +102,7 @@ stringLiteral = Seasoning {
     herbs = const $ const MP.empty
   }
 
-tupleLiteral :: (Ord e, Monad m) => Seasoning m e
+tupleLiteral :: (Ord e, KitParseMonad m) => Seasoning m e
 tupleLiteral = Seasoning {
     reservations = MP.empty,
     salt = MP.empty,
@@ -110,7 +111,7 @@ tupleLiteral = Seasoning {
       MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp (MP.try $ MP.space <* MP.char ',') <* MP.space <* MP.char ')' <* stop)) <|>
       (do
         MP.char '('
-        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.manyTill_ (MP.space *> exp (MP.try $ MP.space <* MP.char ',' <* MP.space)) (MP.try $ exp (MP.try $ MP.space <* MP.char ')'))
+        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.someTill_ (MP.space *> exp (MP.try $ MP.space <* MP.char ',' <* MP.space)) (MP.try $ exp (MP.try $ MP.space <* MP.char ')'))
         stop
         return $ foldl Apply emptyTuple <$> terms
       ),
@@ -123,8 +124,11 @@ valueDefinition = Seasoning {
     salt = MP.empty,
     sugar = const $ const $ const MP.empty,
     herbs = \res exp -> do
-      
-      return $ pure ()
+      name <- MP.notFollowedBy res *> (MP.try textName <|> symbolicName)
+      MP.space1 <* MP.char '=' <* MP.space1
+      val <- exp (MP.try $ MP.space <* MP.char ';')
+      let compress = (\mf ma -> join $ mf <*> pure ma)
+      return $ compress ((\val' -> defineVal (Just name, val')) <$> val) $ pure ()
   }
 
         

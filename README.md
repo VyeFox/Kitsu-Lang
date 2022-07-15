@@ -18,3 +18,11 @@ There is also sugar for:
 * closures with type `Object`: `{state...}`
 * closures of anonymous type: `{state...}::arg => result`
 
+There is a comprehensive `Seasoning` system for injecting syntax into the language.
+
+## Future
+
+* `Spices` will be added to the `Seasoning` type for dealing with destructuring.
+* A transpiler will be written to convert 
+* Eventually a custom interpreter will be written to parse the languages bytecode.
+

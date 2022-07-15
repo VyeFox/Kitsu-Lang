@@ -1,9 +1,4 @@
 
+module {} (curry)
 
-export ::Vect other => Vect{
-    x: self.x + other.x,
-    y: self.y + other.y,
-    z: self.z + other.z
-};
-
-export + = vects => vacts.rest.val vects.val;
+curry = f => {f: f}:: tup => {f: self.f, tup: tup}:: arg => self.f (self.tup arg);

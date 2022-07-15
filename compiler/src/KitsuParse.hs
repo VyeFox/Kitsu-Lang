@@ -1,7 +1,7 @@
 module KitsuParse (parseModule) where
 
 import KitsuByteCode
-import KitsuComponents (parseExpression, textName, symbolicName)
+import KitsuComponents (parseExpression, textName, symbolicName, applyHerbs)
 import KitsuPrelude (preludeDef)
 import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
 import KitsuSpiceRack (escapedChar)
@@ -22,7 +22,7 @@ parseModule seasoning = do
         MP.try ([] <$ MP.space <* MP.char ')') <|>
         ((\(xs, x) -> xs ++ [x]) <$> MP.manyTill_ (MP.space *> (MP.try textName <|> symbolicName) <* MP.space <* MP.char ',')
         (MP.try $ MP.space *> (MP.try textName <|> symbolicName) <* MP.space <* MP.char ')'))
-    global <- MP.manyTill (MP.space *> herbs seasoning (reservations seasoning) (parseExpression seasoning)) (MP.try $ MP.space *> MP.eof)
+    global <- MP.manyTill (MP.space *> applyHerbs seasoning) (MP.try $ MP.space *> MP.eof)
     return $ toModule $ foldl (<*) (pure (imps, exps)) global
     where
         imp = MP.char '\"' *> MP.manyTill escapedChar (MP.char '\"')
