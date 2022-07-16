@@ -1,4 +1,8 @@
+{-# LANGUAGE DeriveGeneric #-}
 module KitsuByteCode where
+
+import Data.Hashable
+import GHC.Generics (Generic)
 
 -- Simple Data Types
 data Literal
@@ -8,13 +12,15 @@ data Literal
     | KitRat Rational
     | KitByte Int -- assume that the number is natural and less than 256
     | KitChar Char
-    deriving (Eq, Show)
+    | KitErr String -- un testable error value with origin as string
+    deriving (Eq, Show, Generic)
 
 -- Functors not Definable Within the Constrains of the Language
 data Primitive
     = KitAsync Expression -- process expression asynchronously
+    | KitLazy Expression -- await throwaway value to process expression
     | KitAtomic Expression -- initial value of mutable variable
-    deriving (Show)
+    deriving (Eq, Show, Generic)
 
 -- General form of an expression
 data Expression
@@ -24,13 +30,19 @@ data Expression
     | Apply Expression Expression -- function application
     | Closure String [(String, Expression)] -- closure
     | GetProp Expression String -- get property of a closure
+    | HasProp String -- property checking predicate
     | CoDef [(Maybe String, Expression)] Expression -- simple procedural logic
-    deriving (Show)
+    deriving (Eq, Show, Generic)
+
+-- Generic derivation of Hashable
+instance Hashable Literal
+instance Hashable Primitive
+instance Hashable Expression
 
 -- Defines the behabiour of a function call
 data ClosureTypeDef = ClosureTypeDef {
     closureTypeName :: String,
-    closureTypeHash :: Integer,
+    closureTypeHash :: Int,
     closureTypeBody :: Maybe (String, Expression)
 } deriving (Show)
 
@@ -47,3 +59,4 @@ data KitsuObjectNotation = KitsuObjectNotation
     [ClosureTypeDef] -- only `Just` for lambdas, otherwise defer definition to reciever
     Expression -- object
     deriving (Show)
+

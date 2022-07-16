@@ -12,7 +12,7 @@ Grouping consists of brackets and bracket sugar like `$`; specifically: \
 
 ## Chaining
 After grouping, chaining is used to link together the remaining tokens between operators like `<>`; specifically: \
-`...<$>...<*>...` is equivalent to `...<$> (...<*>...)` (written as non-operator functions: `(<$>) (...) ((<*>) (...) (...))`)
+`...<$>...<*>...` is equivalent to `(...<$>...)<*>...` (written as non-operator functions: `(<*>) (...) ((<$>) (...) (...))`)
 
 ## Applying
 Finally the remaining tokens are parsed left to right, and greedily take remaining tokens until the function is completely applied; specifically: \

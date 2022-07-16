@@ -25,16 +25,17 @@ library
       KitsuByteCode
       KitsuComponents
       KitsuParse
-      KitsuPrelude
       KitsuPreludeConnection
       KitsuSeasoning
       KitsuSpiceRack
+      KitsuStructure
   other-modules:
       Paths_compiler
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+    , hashable
     , megaparsec
   default-language: Haskell2010
 
@@ -48,6 +49,7 @@ executable compiler-exe
   build-depends:
       base >=4.7 && <5
     , compiler
+    , hashable
     , megaparsec
   default-language: Haskell2010
 
@@ -62,5 +64,6 @@ test-suite compiler-test
   build-depends:
       base >=4.7 && <5
     , compiler
+    , hashable
     , megaparsec
   default-language: Haskell2010

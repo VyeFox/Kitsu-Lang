@@ -9,10 +9,13 @@ id = x => x;
 
 ::Tuple other => Tuple{rest: self, val: other};
 
-::Maybe other => ?val self.val other;
+::Maybe other => ?val self self.val other;
+
+::Either other => ?val self self.val self.alt other;
 
 ::TraitF arg => (self.overloads id error) arg error;
 
 trait = o => TraitF{
     overloads: atomic (true nothing)
 };
+

@@ -15,6 +15,8 @@ import KitsuByteCode
 import KitsuPreludeConnection (inline)
 import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
 
+import Data.Hashable ( Hashable(hash, hashWithSalt) )
+
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
 import Control.Monad (join, return)
@@ -42,12 +44,13 @@ textName = MP.label "name" $
   ((:) <$> startChar <*> MP.many restChar)
     where
       startChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" -- underscore is reserved for internal use
-      restChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
+      restChar = MP.oneOf "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'"
 
 symbolicName :: (Ord e) => MP.Parsec e String String
 symbolicName = MP.label "symbol" $
   MP.notFollowedBy (MP.string "=>") *>
   MP.notFollowedBy (MP.string "::") *>
+  MP.notFollowedBy (MP.char '?') *>
   MP.some (MP.oneOf "$%^&*-+=<>[]|?!:/~")
 
 -- === SIDE-EFFECT INDUCING PARSERS ===
@@ -55,6 +58,7 @@ symbolicName = MP.label "symbol" $
 parsePrimitive :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (m Primitive)
 parsePrimitive seasoning stop = MP.label "primitive" $
   MP.try ((<$>) KitAsync <$> (MP.string "async" *> MP.space1 *> parseExpression seasoning stop)) <|>
+  MP.try ((<$>) KitLazy <$> (MP.string "lazy" *> MP.space1 *> parseExpression seasoning stop)) <|>
   (<$>) KitAtomic <$> (MP.string "atomic" *> MP.space1 *> parseExpression seasoning stop)
 
 parseArrowFunc :: (Ord e, KitParseMonad m) => (Expression -> Expression) -> Seasoning m e -> MP.Parsec e String () -> MP.Parsec e String (String -> m a -> m a)
@@ -64,9 +68,9 @@ parseArrowFunc f seasoning stop = MP.label "... => ..." $ do
     (MP.try textName <|>
     MP.try symbolicName)
   MP.space1 <* MP.string "=>" <* MP.space1
-  expression <- parseExpression seasoning stop
+  expression <- (<$>) f <$> parseExpression seasoning stop
   let compress = (\mf ma -> join $ mf <*> pure ma)
-  return $ \tname -> compress $ (\expression' -> defineType $ ClosureTypeDef tname 0 (Just (argname, expression'))) <$> (f <$> expression)
+  return $ \tname -> compress $ (\expression' -> defineType $ ClosureTypeDef tname (hashWithSalt (hash argname) expression') (Just (argname, expression'))) <$> expression
 
 parseObjectBody :: (Ord e, KitParseMonad m) => Seasoning m e -> MP.Parsec e String (m [(String, Expression)])
 parseObjectBody seasoning = MP.try (pure [] <$ MP.char '{' <* MP.space <* MP.char '}') <|> ((\(wkvs, wkv) -> do
@@ -134,6 +138,7 @@ parseExpression seasoning stop =
         MP.try ((<$>) Lit <$> salt seasoning <* stop') <|>
         MP.try ((<$>) Prim <$> parsePrimitive seasoning stop')
       regularFunc =
+        MP.try ((<$>) pure $ MP.char '?' *> MP.notFollowedBy (reservations seasoning) *> (HasProp <$> textName)) <|>
         MP.try ((<$>) pure $ Name <$> (MP.notFollowedBy (reservations seasoning) *> textName)) <|>
         MP.try (MP.char '(' *> (<$>) pure (Name <$> (MP.notFollowedBy (reservations seasoning) *> symbolicName)) <* MP.char ')') <|>
         MP.char '(' *> MP.space *> this (MP.try $ MP.space <* MP.char ')')
@@ -146,6 +151,7 @@ parseExpression seasoning stop =
         MP.try (MP.char '`' *> (<$>) pure (Name <$> (MP.notFollowedBy (reservations seasoning) *> textName)) <* MP.char '`') <|>
         MP.string "`(" *> MP.space *> this (MP.try $ MP.space <* MP.string ")`")
       component stop' =
+        MP.try (MP.char '$' *> MP.space1 *> this stop') <|>
         MP.try (applySugars seasoning stop') <|>
         MP.try (codef stop') <|>
         MP.try (parseClosure seasoning stop') <|>

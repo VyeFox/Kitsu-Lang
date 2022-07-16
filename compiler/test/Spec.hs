@@ -8,10 +8,10 @@ import System.IO (readFile)
 import KitsuByteCode (Expression, KitsuModule (KitsuModule))
 import KitsuParse (parseModule)
 import KitsuSeasoning (Seasoning, ParseKernel)
-import KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral, valueDefinition)
+import KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral, valueDefinition, typeDefinition)
 
 main :: IO ()
 main = do
     res <- readFile "../testing/example.kitsu"
-    MP.parseTest (parseModule (simpleLiterals <> stringLiteral <> tupleLiteral <> valueDefinition :: Seasoning ParseKernel Void)) res
+    MP.parseTest (parseModule (simpleLiterals <> stringLiteral <> tupleLiteral <> valueDefinition <> typeDefinition :: Seasoning ParseKernel Void)) res
 

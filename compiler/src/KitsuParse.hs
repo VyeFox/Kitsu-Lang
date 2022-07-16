@@ -2,7 +2,6 @@ module KitsuParse (parseModule) where
 
 import KitsuByteCode
 import KitsuComponents (parseExpression, textName, symbolicName, applyHerbs)
-import KitsuPrelude (preludeDef)
 import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
 import KitsuSpiceRack (escapedChar)
 

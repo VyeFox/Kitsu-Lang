@@ -3,13 +3,16 @@ module KitsuSpiceRack (
   simpleLiterals,
   stringLiteral,
   tupleLiteral,
-  valueDefinition
+  valueDefinition,
+  typeDefinition
 ) where
 
 import KitsuByteCode
 import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
 import KitsuPreludeConnection (emptyTuple)
 import KitsuComponents (textName, symbolicName, parseExpression)
+
+import Data.Hashable ( Hashable(hash, hashWithSalt) )
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))
@@ -73,7 +76,8 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
   MP.try parseNat <|>
   MP.try parseRat <|>
   MP.try parseInt <|>
-  parseChar
+  MP.try parseChar <|>
+  parseErr
     where
       parseBool = (KitBool True <$ MP.string "true") <|> (KitBool False <$ MP.string "false")
       parseNat = KitNat <$> parseIntegral
@@ -81,6 +85,7 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
       parseRat = KitRat <$> (sign <*> ((%) <$> parseIntegral <*> (MP.space *> MP.char '%' *> MP.space *> parseIntegral)))
       parseByte = KitByte <$> ((\x' x -> 16*x' + x) <$> (MP.string "0x" *> hex) <*> hex)
       parseChar = KitChar <$> (MP.char '\'' *> escapedChar <* MP.char '\'')
+      parseErr = KitErr <$> (MP.sourcePosPretty <$> MP.getSourcePos) <* MP.string "err"
 
 simpleLiterals :: (Ord e, KitParseMonad m) => Seasoning m e
 simpleLiterals = Seasoning {
@@ -94,7 +99,7 @@ stringLiteral :: (Ord e, KitParseMonad m) => Seasoning m e
 stringLiteral = Seasoning {
     reservations = MP.empty,
     salt = MP.empty,
-    sugar = const $ const $ \stop -> (<$>) pure $ do
+    sugar = const $ const $ \stop -> MP.label "string" $ (<$>) pure $ do
       MP.char '\"'
       chars <- MP.manyTill (Lit . KitChar <$> escapedChar) (MP.char '\"')
       stop
@@ -123,12 +128,30 @@ valueDefinition = Seasoning {
     reservations = MP.empty,
     salt = MP.empty,
     sugar = const $ const $ const MP.empty,
-    herbs = \res exp -> do
+    herbs = \res exp -> MP.label "value-definition" $ do
       name <- MP.notFollowedBy res *> (MP.try textName <|> symbolicName)
       MP.space1 <* MP.char '=' <* MP.space1
       val <- exp (MP.try $ MP.space <* MP.char ';')
       let compress = (\mf ma -> join $ mf <*> pure ma)
       return $ compress ((\val' -> defineVal (Just name, val')) <$> val) $ pure ()
+  }
+
+typeDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
+typeDefinition = Seasoning {
+    reservations = MP.empty,
+    salt = MP.empty,
+    sugar = const $ const $ const MP.empty,
+    herbs = \res expr -> MP.label "type-definition" $ do
+      MP.string "::"
+      typename <- MP.notFollowedBy res *> textName
+      MP.space1
+      argname <-
+        MP.notFollowedBy res *>
+        (MP.try textName <|>
+        MP.try symbolicName)
+      MP.space1 <* MP.string "=>" <* MP.space1
+      expression <- expr (MP.try $ MP.space <* MP.char ';')
+      return $ expression >>= flip defineType (pure ()) . (\expression' -> ClosureTypeDef typename (hashWithSalt (hash argname) expression') (Just (argname, expression')))
   }
 
         
