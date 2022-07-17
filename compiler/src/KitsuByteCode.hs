@@ -29,7 +29,7 @@ data Expression
     | Prim Primitive -- primitive
     | Apply Expression Expression -- function application
     | Closure String [(String, Expression)] -- closure
-    | GetProp Expression String -- get property of a closure
+    | GetProp String -- get property of a closure
     | HasProp String -- property checking predicate
     | CoDef [(Maybe String, Expression)] Expression -- simple procedural logic
     deriving (Eq, Show, Generic)

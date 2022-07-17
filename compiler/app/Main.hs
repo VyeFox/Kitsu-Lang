@@ -1,15 +1,14 @@
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 import Data.Void (Void)
-import System.IO (readFile)
 
 import KitsuByteCode (Expression)
-import KitsuComponents (parseExpression)
-import KitsuSeasoning (Seasoning, ParseKernel)
-import KitsuSpiceRack (simpleLiterals, stringLiteral, tupleLiteral)
+import KitsuComponents (reflect)
+import KitsuSyntaxBundling (ParseKernel, rExpression)
+import KitsuSyntaxBundles (baseExpressions, stringLiteral, tupleLiteral)
 
 main :: IO ()
 main = do
     exp <- getLine
-    MP.parseTest(parseExpression (tupleLiteral <> stringLiteral <> simpleLiterals) MP.eof :: MP.Parsec Void String (ParseKernel Expression)) exp
+    MP.parseTest (rExpression (reflect $ tupleLiteral <> stringLiteral <> baseExpressions) MP.eof :: MP.Parsec Void String (ParseKernel Expression)) exp
     

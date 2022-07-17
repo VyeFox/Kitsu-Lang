@@ -1,6 +1,6 @@
-module KitsuSpiceRack (
+module KitsuSyntaxBundles (
   escapedChar,
-  simpleLiterals,
+  baseExpressions,
   stringLiteral,
   tupleLiteral,
   valueDefinition,
@@ -8,9 +8,8 @@ module KitsuSpiceRack (
 ) where
 
 import KitsuByteCode
-import KitsuSeasoning (Seasoning(..), KitParseMonad(..))
+import KitsuSyntaxBundling (SyntaxBundle(..), KitParseMonad(..), SyntaxReflection(..))
 import KitsuPreludeConnection (emptyTuple)
-import KitsuComponents (textName, symbolicName, parseExpression)
 
 import Data.Hashable ( Hashable(hash, hashWithSalt) )
 
@@ -22,7 +21,7 @@ import qualified Text.Megaparsec.Error as MP
 import Data.Ratio ( (%) )
 
 parseIntegral :: (Num a, Ord e) => MP.Parsec e String a
-parseIntegral = foldl (\ s dig -> s*10 + dig) 0 <$> MP.some digit
+parseIntegral = foldl (\s dig -> s*10 + dig) 0 <$> MP.some digit
 
 digit :: (Num a, Ord e) => MP.Parsec e String a
 digit = MP.label "0..9" $
@@ -87,71 +86,70 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
       parseChar = KitChar <$> (MP.char '\'' *> escapedChar <* MP.char '\'')
       parseErr = KitErr <$> (MP.sourcePosPretty <$> MP.getSourcePos) <* MP.string "err"
 
-simpleLiterals :: (Ord e, KitParseMonad m) => Seasoning m e
-simpleLiterals = Seasoning {
-    reservations = (<$) () $ MP.try (MP.string "true") <|> MP.string "false",
-    salt = parseLiteral,
-    sugar = const $ const $ const MP.empty,
-    herbs = const $ const MP.empty
+baseExpressions :: (Ord e, KitParseMonad m) => SyntaxBundle m e
+baseExpressions = SyntaxBundle {
+    keywords = (<$) () $
+      MP.try (MP.string "true") <|>
+      MP.try (MP.string "false") <|>
+      MP.try (MP.string "async") <|>
+      MP.try (MP.string "lazy") <|>
+      MP.string "atomic",
+    extensions = \r stop ->
+      MP.try ((<$>) (Prim . KitAsync) <$> (MP.string "async" *> MP.space1 *> rExpression r stop)) <|>
+      MP.try ((<$>) (Prim . KitLazy) <$> (MP.string "lazy" *> MP.space1 *> rExpression r stop)) <|>
+      MP.try ((<$>) (Prim . KitAtomic) <$> (MP.string "atomic" *> MP.space1 *> rExpression r stop)) <|>
+      ((<$>) Lit <$> parseLiteral <* stop),
+    statics = const MP.empty
   }
 
-stringLiteral :: (Ord e, KitParseMonad m) => Seasoning m e
-stringLiteral = Seasoning {
-    reservations = MP.empty,
-    salt = MP.empty,
-    sugar = const $ const $ \stop -> MP.label "string" $ (<$>) pure $ do
+stringLiteral :: (Ord e, KitParseMonad m) => SyntaxBundle m e
+stringLiteral = SyntaxBundle {
+    keywords = MP.empty,
+    extensions = \r stop -> MP.label "string" $ (<$>) pure $ do
       MP.char '\"'
       chars <- MP.manyTill (Lit . KitChar <$> escapedChar) (MP.char '\"')
       stop
       return $ foldl Apply emptyTuple chars,
-    herbs = const $ const MP.empty
+    statics = const MP.empty
   }
 
-tupleLiteral :: (Ord e, KitParseMonad m) => Seasoning m e
-tupleLiteral = Seasoning {
-    reservations = MP.empty,
-    salt = MP.empty,
-    sugar = \res exp stop ->
+tupleLiteral :: (Ord e, KitParseMonad m) => SyntaxBundle m e
+tupleLiteral = SyntaxBundle {
+    keywords = MP.empty,
+    extensions = \r stop ->
       MP.try ((<$>) pure $ emptyTuple <$ MP.char '(' <* MP.space <* MP.char ')' <* stop) <|>
-      MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> exp (MP.try $ MP.space <* MP.char ',') <* MP.space <* MP.char ')' <* stop)) <|>
+      MP.try ((<$>) (Apply emptyTuple) <$> (MP.char '(' *> MP.space *> rExpression r (MP.try $ MP.space <* MP.char ',') <* MP.space <* MP.char ')' <* stop)) <|>
       (do
         MP.char '('
-        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.someTill_ (MP.space *> exp (MP.try $ MP.space <* MP.char ',' <* MP.space)) (MP.try $ exp (MP.try $ MP.space <* MP.char ')'))
+        terms <- (\(es, e) -> (\as a -> as ++ [a]) <$> sequenceA es <*> e) <$> MP.someTill_ (MP.space *> rExpression r (MP.try $ MP.space <* MP.char ',' <* MP.space)) (MP.try $ rExpression r (MP.try $ MP.space <* MP.char ')'))
         stop
         return $ foldl Apply emptyTuple <$> terms
       ),
-    herbs = const $ const MP.empty
+    statics = const MP.empty
   }
 
-valueDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
-valueDefinition = Seasoning {
-    reservations = MP.empty,
-    salt = MP.empty,
-    sugar = const $ const $ const MP.empty,
-    herbs = \res exp -> MP.label "value-definition" $ do
-      name <- MP.notFollowedBy res *> (MP.try textName <|> symbolicName)
+valueDefinition :: (Ord e, KitParseMonad m) => SyntaxBundle m e
+valueDefinition = SyntaxBundle {
+    keywords = MP.empty,
+    extensions = const $ const MP.empty,
+    statics = \r -> MP.label "value-definition" $ do
+      name <- MP.try (rTextName r) <|> rSymbolName r
       MP.space1 <* MP.char '=' <* MP.space1
-      val <- exp (MP.try $ MP.space <* MP.char ';')
+      val <- rExpression r (MP.try $ MP.space <* MP.char ';')
       let compress = (\mf ma -> join $ mf <*> pure ma)
       return $ compress ((\val' -> defineVal (Just name, val')) <$> val) $ pure ()
   }
 
-typeDefinition :: (Ord e, KitParseMonad m) => Seasoning m e
-typeDefinition = Seasoning {
-    reservations = MP.empty,
-    salt = MP.empty,
-    sugar = const $ const $ const MP.empty,
-    herbs = \res expr -> MP.label "type-definition" $ do
+typeDefinition :: (Ord e, KitParseMonad m) => SyntaxBundle m e
+typeDefinition = SyntaxBundle {
+    keywords = MP.empty,
+    extensions = const $ const MP.empty,
+    statics = \r -> MP.label "type-definition" $ do
       MP.string "::"
-      typename <- MP.notFollowedBy res *> textName
+      typename <- rTextName r
       MP.space1
-      argname <-
-        MP.notFollowedBy res *>
-        (MP.try textName <|>
-        MP.try symbolicName)
-      MP.space1 <* MP.string "=>" <* MP.space1
-      expression <- expr (MP.try $ MP.space <* MP.char ';')
-      return $ expression >>= flip defineType (pure ()) . (\expression' -> ClosureTypeDef typename (hashWithSalt (hash argname) expression') (Just (argname, expression')))
+      fbody <- rArrowFunc r id (MP.try $ MP.space <* MP.char ';')
+      return $ fbody typename $ pure ()
   }
 
         

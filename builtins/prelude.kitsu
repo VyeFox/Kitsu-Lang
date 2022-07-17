@@ -1,11 +1,11 @@
 module {} (
     Tuple,
     Maybe,
-    Trait,
-    id
+    TraitF,
+    id,
+    choose,
+    pipe
 )
-
-id = x => x;
 
 ::Tuple other => Tuple{rest: self, val: other};
 
@@ -14,6 +14,14 @@ id = x => x;
 ::Either other => ?val self self.val self.alt other;
 
 ::TraitF arg => (self.overloads id error) arg error;
+
+id = x => x;
+
+run = f => f ();
+
+choose = pred => [pred]:: f => [pred, f]:: g => [pred, f, g]:: x => pred x f g x;
+
+pipe = f => [f]:: g => [f, g]:: x => f $ g x;
 
 trait = o => TraitF{
     overloads: atomic (true nothing)

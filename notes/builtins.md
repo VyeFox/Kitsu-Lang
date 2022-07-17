@@ -3,6 +3,7 @@ This section describes the built-in and standard types in Kitsu.
 
 ## Primitive Types
 These types cannot be re-defined within the confines of the language:
+* `Object` A type that copies another object and ovverides its properties.
 * `Async` A type that represents a promise, the value is aquired by calling the instance with a throw-away value such as an empty tuple.
 * `Lazy` A type that represents a lazy value, the value is aquired by calling the instance with a throw-away value such as an empty tuple.
 * `Atomic` A special wrapper type that allows unique access to a value.
@@ -44,7 +45,5 @@ id = {
 These types are defined in the language and are available to all modules:
 * `Maybe` A type that represents an optional value.
 * `Either` A type that represents a value that can be either a left or right value.
-* `Real` A type that represents a real number.
 * `Tuple` A tuple modeled as a linked list.
-* `Match` A queryable predicate for deep type checking.
 * `TraitF` A function with overloadable implementation.
