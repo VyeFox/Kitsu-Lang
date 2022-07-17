@@ -15,6 +15,8 @@ import qualified Text.Megaparsec.Char as MP
 import qualified Text.Megaparsec.Error as MP
 import Data.Functor.Compose (Compose (Compose), getCompose)
 
+-- === reflect ===
+
 reflect :: (Ord e, KitParseMonad m) => SyntaxBundle m e -> SyntaxReflection m e
 reflect s = res
   where
@@ -25,6 +27,8 @@ reflect s = res
       rArrowFunc = parseArrowFunc s,
       rStatic = statics s res
     }
+
+-- === mirror ===
 
 textName :: (Ord e, KitParseMonad m) => SyntaxBundle m e -> MP.Parsec e String String
 textName s = MP.label "name" $ (*>) (MP.notFollowedBy $ keywords s) $ (:) <$> startChar <*> MP.many restChar

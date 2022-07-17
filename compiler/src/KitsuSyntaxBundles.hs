@@ -89,11 +89,12 @@ parseLiteral = MP.label "literal" $ (<$>) pure $
 baseExpressions :: (Ord e, KitParseMonad m) => SyntaxBundle m e
 baseExpressions = SyntaxBundle {
     keywords = (<$) () $
-      MP.try (MP.string "true") <|>
-      MP.try (MP.string "false") <|>
       MP.try (MP.string "async") <|>
       MP.try (MP.string "lazy") <|>
-      MP.string "atomic",
+      MP.try (MP.string "atomic") <|>
+      MP.try (MP.string "true") <|>
+      MP.try (MP.string "false") <|>
+      MP.string "err",
     extensions = \r stop ->
       MP.try ((<$>) (Prim . KitAsync) <$> (MP.string "async" *> MP.space1 *> rExpression r stop)) <|>
       MP.try ((<$>) (Prim . KitLazy) <$> (MP.string "lazy" *> MP.space1 *> rExpression r stop)) <|>
