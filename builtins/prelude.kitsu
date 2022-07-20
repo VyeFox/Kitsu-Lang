@@ -1,10 +1,9 @@
 module {} (
     Tuple,
     Maybe,
+    Either,
     TraitF,
-    id,
-    choose,
-    pipe
+    id
 )
 
 ::Tuple other => Tuple{rest: self, val: other};
@@ -16,14 +15,3 @@ module {} (
 ::TraitF arg => (self.overloads id error) arg error;
 
 id = x => x;
-
-run = f => f ();
-
-choose = pred => [pred]:: f => [pred, f]:: g => [pred, f, g]:: x => pred x f g x;
-
-pipe = f => [f]:: g => [f, g]:: x => f $ g x;
-
-trait = o => TraitF{
-    overloads: atomic (true nothing)
-};
-

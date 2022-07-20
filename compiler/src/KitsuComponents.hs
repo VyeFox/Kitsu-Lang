@@ -3,7 +3,7 @@ module KitsuComponents (
 ) where
 
 import KitsuByteCode
-import KitsuPreludeConnection (inline)
+import KitsuRuntimeConnection (inline)
 import KitsuSyntaxBundling (SyntaxBundle(..), KitParseMonad(..), SyntaxReflection(..))
 
 import Data.Hashable ( Hashable(hash, hashWithSalt) )

@@ -4,7 +4,7 @@
 module KitsuSyntaxBundling (SyntaxBundle(..), KitParseMonad(..), SyntaxReflection(..), ParseKernel) where
 
 import KitsuByteCode
-import KitsuPreludeConnection (emptyTuple)
+import KitsuRuntimeConnection (emptyTuple)
 
 import qualified Text.Megaparsec as MP
 import Control.Applicative ((<$), (<$>), (<|>))

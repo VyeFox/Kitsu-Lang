@@ -9,7 +9,7 @@ module KitsuSyntaxBundles (
 
 import KitsuByteCode
 import KitsuSyntaxBundling (SyntaxBundle(..), KitParseMonad(..), SyntaxReflection(..))
-import KitsuPreludeConnection (emptyTuple)
+import KitsuRuntimeConnection (emptyTuple)
 
 import Data.Hashable ( Hashable(hash, hashWithSalt) )
 

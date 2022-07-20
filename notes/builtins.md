@@ -31,7 +31,7 @@ These operations cannot be re-defined within the confines of the language and ar
 * `lazy` A keyword that represents a lazy value.
 * `atomic` A keyword that represents an atomic value.
 * `eq` Checks for equality.
-* `obj.prop` Accesses a property of an object, throws an error if the property does not exist.
+* `.prop` Accesses a property of an object, throws an error if the property does not exist.
 * `?prop` Checks if a property of an object exists.
 
 example:

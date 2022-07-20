@@ -25,8 +25,7 @@ library
       KitsuByteCode
       KitsuComponents
       KitsuParse
-      KitsuPreludeConnection
-      KitsuStructure
+      KitsuRuntimeConnection
       KitsuSyntaxBundles
       KitsuSyntaxBundling
   other-modules:
