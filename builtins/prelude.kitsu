@@ -2,7 +2,6 @@ module {} (
     Tuple,
     Maybe,
     Either,
-    TraitF,
     id
 )
 
@@ -11,7 +10,5 @@ module {} (
 ::Maybe other => ?val self self.val other;
 
 ::Either other => ?val self self.val self.alt other;
-
-::TraitF arg => (self.overloads id error) arg error;
 
 id = x => x;

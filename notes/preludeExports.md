@@ -6,7 +6,6 @@ The prelude exports the following Types:
 * `Tuple` tuple stored as fold, terminated by `()`.
 * `Maybe` optional data type.
 * `Either` alternative data type.
-* `TraitF` overlodable function type.
 
 The prelude exports the following Closures:
 * `id` identity function.

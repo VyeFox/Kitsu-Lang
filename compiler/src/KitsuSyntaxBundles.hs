@@ -153,4 +153,9 @@ typeDefinition = SyntaxBundle {
       return $ fbody typename $ pure ()
   }
 
+defaultBundle :: (Ord e, KitParseMonad m) => SyntaxBundle m e
+defaultBundle = baseExpressions
+  <> valueDefinition
+  <> typeDefinition
+
         

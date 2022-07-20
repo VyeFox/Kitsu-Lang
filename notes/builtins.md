@@ -46,4 +46,3 @@ These types are defined in the language and are available to all modules:
 * `Maybe` A type that represents an optional value.
 * `Either` A type that represents a value that can be either a left or right value.
 * `Tuple` A tuple modeled as a linked list.
-* `TraitF` A function with overloadable implementation.
